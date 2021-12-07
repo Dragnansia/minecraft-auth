@@ -23,8 +23,11 @@ impl Client {
     ///
     /// # Example
     /// ```
+    /// use minecraft_auth::{instance::Instance, client::Client};
+    ///
+    /// let client = Client::default();
     /// let instance = Instance::default();
-    /// start_instance(&instance);
+    /// client.start_instance(&instance);
     /// ```
     pub fn start_instance(&self, _instance: &Instance) {}
 }

@@ -1,6 +1,8 @@
-use reqwest;
+use serde_json::Value;
+use std::sync::{mpsc::channel, Arc, Mutex};
+use tokio::runtime::Runtime;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, PartialOrd)]
 pub struct User {
     /// Email or Pseudo
     pub username: String,
@@ -37,50 +39,74 @@ impl User {
     }
 }
 
-/// Callback for connection with error or the User data
-type ConnectCallBack = fn(Result<User, &'static str>);
-
-// Send a post request to connect
-// get response and send value on callback or return
-// need to be a async function or used multi threading with
-// callback
-///
+/// Try a connection to minecraft mojang account
 ///
 /// # Example
 /// ```
-/// fn cb(Result<User, &'static str>) {}
+/// use minecraft_auth::user::try_connect;
 ///
-/// fn functon() {
-///     try_connect("Username".to_string(), "Password".to_string(), cb);
-///     // or
-///     try_connect("Username".to_string(), "Password".to_string(), |res| {});
-/// }
+/// let res = try_connect("Username".to_owned(), "Password".to_owned());
+/// println!("{:?}", res);
 /// ```
-pub fn try_connect(username: String, password: String, callback: ConnectCallBack) {
+pub fn try_connect(username: String, password: String) -> Result<User, String> {
     if username.is_empty() || password.is_empty() {
-        callback(Err("Username or password is empty"));
+        Err("Username or password is empty".to_owned())
+    } else {
+        let rt = Runtime::new().unwrap();
+
+        let us = Arc::new(Mutex::new(username.clone()));
+        let ps = Arc::new(Mutex::new(password));
+        let (tx, rx) = channel();
+
+        // Move this on other file
+        rt.spawn(async move {
+            let username = us.lock().unwrap().to_owned();
+            let password = ps.lock().unwrap().to_owned();
+
+            let reqwest_client = reqwest::Client::new();
+            let res = reqwest_client
+                .post("https://authserver.mojang.com/authenticate")
+                .form(&[
+                    ("agent", "{\"name\": \"Minecraft\",\"version\":1}"),
+                    ("username", &username),
+                    ("password", &password),
+                ])
+                .send()
+                .await;
+
+            let json: Value = match res {
+                Ok(r) => {
+                    let data = r.text().await.unwrap();
+                    let json = serde_json::from_str(&data).unwrap();
+                    json
+                }
+                Err(_) => Value::default(),
+            };
+
+            tx.send(json).unwrap();
+        });
+
+        match rx.recv() {
+            Ok(data) => {
+                let client_token = data["clientToken"].to_string();
+                let access_token = data["accessToken"].to_string();
+                let uuid = data["selectedProfile"]["id"].to_string();
+
+                Ok(User::new(username, uuid, client_token, access_token))
+            }
+            Err(err) => Err(err.to_string()),
+        }
     }
-
-    // Move this on other file
-    let reqwest_client = reqwest::Client::new();
-    let res = reqwest_client
-        .post("https://authserver.mojang.com/authenticate")
-        .body(format!(
-            "{{\"agent\":{{\"name\":\"Minecraft\",\"version\":1}},\"username\": {},\"password\": {} }}",
-            username, password
-        )).send();
-
-    callback(Ok(User::default()))
 }
 
 #[cfg(test)]
 mod test {
-    use super::try_connect;
+    use crate::user::{try_connect, User};
 
     #[test]
     fn connect() {
-        try_connect("".to_string(), "".to_string(), |res| {
-            println!("{:?}", res.unwrap());
-        });
+        let res = try_connect("sdqsd<".to_string(), "qsdqsd".to_string());
+        assert!(res.is_ok(), "Error: {:?}", res.err());
+        assert_ne!(User::default(), res.unwrap());
     }
 }

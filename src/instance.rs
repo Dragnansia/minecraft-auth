@@ -2,9 +2,11 @@
 ///
 /// # Example
 /// ```
+/// use minecraft_auth::instance::Instance;
+///
 /// let instance = Instance::default();
 /// // or
-/// let instance = Instance::new("1.18", "/game/dir");
+/// let instance = Instance::new("1.18".to_string(), "/game/dir".to_string());
 /// ```
 pub struct Instance {
     /// This is the name of the folder content
