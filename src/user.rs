@@ -85,13 +85,12 @@ pub fn try_connect(username: String, password: String) -> Result<User, String> {
 
         match rx.recv() {
             Ok(data) => {
-                let error = data["errorMessage"].to_string();
-                if !error.is_empty() {
-                    Err(error)
+                if let Some(error) = data["errorMessage"].as_str() {
+                    Err(error.to_owned())
                 } else {
-                    let client_token = data["clientToken"].to_string();
-                    let access_token = data["accessToken"].to_string();
-                    let uuid = data["selectedProfile"]["id"].to_string();
+                    let client_token = data["clientToken"].as_str().unwrap().to_string();
+                    let access_token = data["accessToken"].as_str().unwrap().to_string();
+                    let uuid = data["selectedProfile"]["id"].as_str().unwrap().to_string();
 
                     Ok(User::new(username, uuid, client_token, access_token))
                 }
@@ -107,7 +106,7 @@ mod test {
 
     #[test]
     fn connect() {
-        let res = try_connect("sdqsd<".to_string(), "qsdqsd".to_string());
+        let res = try_connect("Username".to_string(), "Password".to_string());
         assert!(res.is_ok(), "Error: {:?}", res.err());
         let user = res.unwrap();
         assert_ne!(User::default(), user);
