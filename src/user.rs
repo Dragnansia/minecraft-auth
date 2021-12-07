@@ -64,13 +64,10 @@ pub fn try_connect(username: String, password: String) -> Result<User, String> {
             let password = ps.lock().unwrap().to_owned();
 
             let reqwest_client = reqwest::Client::new();
+            let body = format!("{{\"agent\": {{\"name\": \"Minecraft\",\"version\":1}},\"username\":\"{}\",\"password\":\"{}\"}}", username, password);
             let res = reqwest_client
                 .post("https://authserver.mojang.com/authenticate")
-                .form(&[
-                    ("agent", "{\"name\": \"Minecraft\",\"version\":1}"),
-                    ("username", &username),
-                    ("password", &password),
-                ])
+                .body(body)
                 .send()
                 .await;
 
@@ -88,11 +85,16 @@ pub fn try_connect(username: String, password: String) -> Result<User, String> {
 
         match rx.recv() {
             Ok(data) => {
-                let client_token = data["clientToken"].to_string();
-                let access_token = data["accessToken"].to_string();
-                let uuid = data["selectedProfile"]["id"].to_string();
+                let error = data["errorMessage"].to_string();
+                if !error.is_empty() {
+                    Err(error)
+                } else {
+                    let client_token = data["clientToken"].to_string();
+                    let access_token = data["accessToken"].to_string();
+                    let uuid = data["selectedProfile"]["id"].to_string();
 
-                Ok(User::new(username, uuid, client_token, access_token))
+                    Ok(User::new(username, uuid, client_token, access_token))
+                }
             }
             Err(err) => Err(err.to_string()),
         }
@@ -107,6 +109,8 @@ mod test {
     fn connect() {
         let res = try_connect("sdqsd<".to_string(), "qsdqsd".to_string());
         assert!(res.is_ok(), "Error: {:?}", res.err());
-        assert_ne!(User::default(), res.unwrap());
+        let user = res.unwrap();
+        assert_ne!(User::default(), user);
+        println!("{:?}", user)
     }
 }
