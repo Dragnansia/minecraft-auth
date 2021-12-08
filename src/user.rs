@@ -100,16 +100,10 @@ pub fn try_connect(username: String, password: String) -> Result<User, String> {
     }
 }
 
-#[cfg(test)]
-mod test {
-    use crate::user::{try_connect, User};
-
-    #[test]
-    fn connect() {
-        let res = try_connect("Username".to_string(), "Password".to_string());
-        assert!(res.is_ok(), "Error: {:?}", res.err());
-        let user = res.unwrap();
-        assert_ne!(User::default(), user);
-        println!("{:?}", user)
-    }
+#[test]
+fn user_connection() {
+    let res = try_connect("Username".to_string(), "Password".to_string());
+    assert!(res.is_ok(), "Error: {:?}", res.err());
+    let user = res.unwrap();
+    assert_ne!(User::default(), user);
 }
