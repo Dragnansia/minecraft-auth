@@ -2,7 +2,7 @@ use serde_json::Value;
 use std::sync::{mpsc::channel, Arc, Mutex};
 use tokio::runtime::Runtime;
 
-#[derive(Debug, PartialEq, PartialOrd)]
+#[derive(Debug, PartialEq, PartialOrd, Default)]
 pub struct User {
     /// Email or Pseudo
     pub username: String,
@@ -15,17 +15,6 @@ pub struct User {
 
     /// Access token for this account
     pub access_token: String,
-}
-
-impl Default for User {
-    fn default() -> Self {
-        Self {
-            username: "".to_owned(),
-            uuid: "".to_owned(),
-            client_token: "".to_owned(),
-            access_token: "".to_owned(),
-        }
-    }
 }
 
 impl User {

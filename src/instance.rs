@@ -8,6 +8,7 @@
 /// // or
 /// let instance = Instance::new("1.18".to_string(), "/game/dir".to_string());
 /// ```
+#[derive(Debug, Default)]
 pub struct Instance {
     /// This is the name of the folder content
     /// all minecraft file of this instance
@@ -31,21 +32,6 @@ pub struct Instance {
 
     /// Path of natives folder
     pub lib_path: String,
-}
-
-impl Default for Instance {
-    // Create a default Instance
-    fn default() -> Self {
-        Self {
-            name: "Default Instance".to_owned(),
-            game_dir: "".to_owned(),
-            assets_dir: "".to_owned(),
-            lib_path: "".to_owned(),
-            asset_index: "1.18".to_owned(),
-            version: "1.18".to_owned(),
-            version_type: "vanilla".to_owned(),
-        }
-    }
 }
 
 impl Instance {

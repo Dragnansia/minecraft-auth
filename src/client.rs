@@ -1,6 +1,7 @@
 use crate::{instance::Instance, user::User};
 use std::process::{Child, Command};
 
+#[derive(Debug)]
 pub struct Client {
     pub ram_min: i32,
     pub ram_max: i32,
