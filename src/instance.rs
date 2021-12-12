@@ -1,56 +1,52 @@
-/// This is a minecraft instance
-///
-/// # Example
-/// ```
-/// use minecraft_auth::instance::Instance;
-///
-/// let instance = Instance::default();
-/// // or
-/// let instance = Instance::new("1.18".to_string(), "/game/dir".to_string());
-/// ```
+use std::process::{Child, Command};
+
 #[derive(Debug, Default)]
 pub struct Instance {
     /// This is the name of the folder content
-    /// all minecraft file of this instance
+    /// minecraft file of this instance
     pub name: String,
 
-    /// The game dir is a formatted path to all
-    /// minecraft instance download and the current name
+    /// The game dir is a formatted path to the current
+    /// minecraft instance
     pub game_dir: String,
 
     /// Minecraft assets directory
     pub assets_dir: String,
     /// Minecraft asset index
-    /// (ex: 1.12)
     pub asset_index: String,
 
     /// Minecraft version
-    /// (ex: 1.12.2)
     pub version: String,
     /// (ex: forge - release)
     pub version_type: String,
 
-    /// Path of natives folder
+    /// Libraries path folder
     pub lib_path: String,
+
+    /// Ram
+    pub ram_min: i32,
+    pub ram_max: i32,
+
+    /// Window size
+    pub window_width: i32,
+    pub window_height: i32,
+
+    /// Current language
+    pub current_language: String,
 }
 
 impl Instance {
-    /// Create a new instance
-    ///
-    /// # Example
-    /// ```
-    /// use minecraft_auth::instance::Instance;
-    ///
-    /// let instance = Instance::new(
-    ///         "Forge 1.12".to_owned(), "/game/dir".to_owned(),
-    ///         "1.12.2-forge".to_owned(), "1.12".to_owned(), "Forge".to_owned());
-    /// ```
     pub fn new(
         name: String,
         game_dir: String,
         version: String,
         asset_index: String,
         version_type: String,
+        ram_min: i32,
+        ram_max: i32,
+        window_width: i32,
+        window_height: i32,
+        current_language: String,
     ) -> Self {
         Self {
             name,
@@ -60,6 +56,21 @@ impl Instance {
             asset_index,
             version,
             version_type,
+            ram_min,
+            ram_max,
+            window_width,
+            window_height,
+            current_language,
         }
+    }
+}
+
+pub fn start_instance(_: &Instance) -> Option<Child> {
+    let mut cmd = Command::new("java");
+    let spawn = cmd.arg("");
+
+    match spawn.spawn() {
+        Ok(child) => Some(child),
+        Err(_) => None,
     }
 }
