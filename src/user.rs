@@ -100,6 +100,7 @@ pub fn connect_to_mojang(username: String, password: String) -> UConnect<UCStatu
  * Work but it's not start on Tokio Runtime environment
  * and if Runtime::new() is used, the sender and the thread is closed/drop
  */
+#[test]
 mod test {
     use super::{connect_to_mojang, UCStatut, User};
     use tokio::sync::mpsc::error::TryRecvError;
