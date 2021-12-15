@@ -77,7 +77,7 @@ async fn intern_connect(username: String, password: String, sender: Sender<UCSta
         let _ = sender
             .send(UCStatut::Error(format!(
                 "Minecraft Account Error: {}",
-                err.to_string()
+                error.to_string()
             )))
             .await;
     } else {
