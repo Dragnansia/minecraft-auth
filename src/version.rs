@@ -83,13 +83,13 @@ pub fn download_version(
 ) -> ThreadData<DlStatut, ()> {
     let (tx, rx) = channel(1);
     let appclone = app.clone();
-
-    let _ = async move { intern_download_version(appclone, url, version, tx).await };
+    let thread =
+        tokio::spawn(async move { intern_download_version(appclone, url, version, tx).await });
 
     ThreadData {
         id: rand::random::<i128>(),
         receiver: rx,
-        _thread: None,
+        _thread: Some(thread),
     }
 }
 
