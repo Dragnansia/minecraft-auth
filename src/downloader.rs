@@ -14,7 +14,8 @@ use tokio::{
 
 #[derive(Debug)]
 pub enum DlStatut {
-    Percentage(u64),
+    Percentage(String, u64),
+    Error(String),
     Finish,
 }
 
@@ -24,7 +25,7 @@ pub enum ThreadStatut {
     Waiting,
 }
 
-/// Is used to know
+/// Is used to know the current state of the thread
 #[derive(Debug)]
 pub struct ThreadData<R, T> {
     /// ID of this ThreadData, generate with rand create
@@ -83,7 +84,7 @@ fn create_folder(folder: &str) {
     create_dir_all(folder).unwrap();
 }
 
-async fn intern_download_file(url: String, path: String, tx: Sender<Result<DlStatut, String>>) {
+async fn intern_download_file(url: String, path: String, tx: Sender<DlStatut>) {
     let client = Client::new();
     match client.get(&url).send().await {
         Ok(response) => {
@@ -91,7 +92,7 @@ async fn intern_download_file(url: String, path: String, tx: Sender<Result<DlSta
             let mut file = match File::create(&path) {
                 Ok(fc) => fc,
                 Err(err) => {
-                    tx.send(Err(err.to_string())).await.unwrap();
+                    tx.send(DlStatut::Error(err.to_string())).await.unwrap();
                     return;
                 }
             };
@@ -111,20 +112,20 @@ async fn intern_download_file(url: String, path: String, tx: Sender<Result<DlSta
                 percentage = min(percentage + (chunk.len() as u64), size);
 
                 let _ = tx
-                    .send(Ok(DlStatut::Percentage(percentage * 100 / size)))
+                    .send(DlStatut::Percentage(path.clone(), percentage * 100 / size))
                     .await;
             }
 
-            let _ = tx.send(Ok(DlStatut::Finish)).await;
+            let _ = tx.send(DlStatut::Finish).await;
         }
         Err(err) => {
-            let _ = tx.send(Err(err.to_string())).await;
+            let _ = tx.send(DlStatut::Error(err.to_string())).await;
         }
     };
 }
 
 /// Download one file and return a ThreadData
-pub fn download_file(url: String, path: String) -> ThreadData<Result<DlStatut, String>, ()> {
+pub fn download_file(url: String, path: String) -> ThreadData<DlStatut, ()> {
     let (tx, receiver) = channel(1024);
     let thread = tokio::spawn(async move { intern_download_file(url, path, tx).await });
 
