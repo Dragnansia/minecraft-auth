@@ -76,7 +76,11 @@ async fn intern_download_version(
 
 /// Download a specifique version of the game
 /// Return the pourcentage of download version
-fn download_version(app: &MinecraftAuth, url: String, version: String) -> ThreadData<DlStatut, ()> {
+pub fn download_version(
+    app: &MinecraftAuth,
+    url: String,
+    version: String,
+) -> ThreadData<DlStatut, ()> {
     let (tx, rx) = channel(1);
     let appclone = app.clone();
 
