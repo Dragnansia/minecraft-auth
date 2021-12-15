@@ -19,7 +19,7 @@ impl MinecraftAuth {
     pub fn new_just_name(name: String) -> Option<Self> {
         match dirs::data_dir() {
             Some(d) => {
-                let path = format!("{}/{}", d.to_str().unwrap(), name);
+                let path = format!("{}/{}", d.as_path().to_str().unwrap(), name);
                 std::fs::create_dir_all(path.clone()).unwrap();
                 Some(Self { name, path })
             }
