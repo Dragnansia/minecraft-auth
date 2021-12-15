@@ -5,14 +5,29 @@ use tokio::{
     task::JoinHandle,
 };
 
+/// This is enum for connection statut
+/// when you try to connect to a account
 pub enum UCStatut {
+    /// return the user connection information
     User(User),
+
+    /// Error of reqwest when tried to send request
+    /// to minecraft api
     RequestError(String),
+
+    /// Error of minecraft api when try to connect
     ConnectionError(String),
+
+    /// Other error like channel close for receiver
     OtherError(String),
+
+    /// Juste connection don't have error and is just not finish
+    /// Is Here if you want to do something when is not ready
     Waiting,
 }
 
+/// This is struct to save receiver and thread
+/// where connection is currently working
 #[derive(Debug)]
 pub struct UConnect {
     receiver: Receiver<UCStatut>,
@@ -20,6 +35,22 @@ pub struct UConnect {
 }
 
 impl UConnect {
+    /// Send UCStatut of the latest result of receiver
+    ///
+    /// # Example
+    /// ```
+    /// let uconnect = mojang_connect("".to_owned(), "".to_owned());
+    ///
+    /// loop {
+    ///     match uconnect.message() {
+    ///         UCStatut::User(u) => println!("{:?}", u),
+    ///         UCStatut::RequestError(err) => println!("{}", err),
+    ///         UCStatut::ConnectionError(err) => println!("{}", err),
+    ///         UCStatut::OtherError(err) => {},
+    ///         UCStatut::Waiting => {},
+    ///     }
+    /// }
+    /// ```
     pub fn message(&mut self) -> UCStatut {
         match self.receiver.try_recv() {
             Ok(r) => r,
@@ -34,6 +65,7 @@ impl UConnect {
     }
 }
 
+/// Minecraft user information for playing game
 #[derive(Debug, PartialEq, PartialOrd, Default)]
 pub struct User {
     /// Email or Pseudo
@@ -60,6 +92,7 @@ impl User {
     }
 }
 
+/// This is the intern connection function for mojang minecraft api
 async fn intern_connect(username: String, password: String, sender: Sender<UCStatut>) {
     let client = Client::new();
     let body = format!("{{\"agent\": {{\"name\": \"Minecraft\",\"version\":1}},\"username\":\"{}\",\"password\":\"{}\"}}", username, password);
@@ -100,6 +133,7 @@ async fn intern_connect(username: String, password: String, sender: Sender<UCSta
     }
 }
 
+/// Try to connect to mojang api with Username and Password
 pub fn connect_to_mojang(username: String, password: String) -> UConnect {
     let (sender, receiver) = channel(1);
     let thread = tokio::spawn(async move { intern_connect(username, password, sender).await });
