@@ -39,7 +39,7 @@ pub struct ThreadData<R, T> {
 
     /// Thread used by Sender<R>, need to be store if we don't
     /// a drop
-    pub _thread: JoinHandle<T>,
+    pub _thread: Option<JoinHandle<T>>,
 }
 
 impl<R, T> PartialEq for ThreadData<R, T> {
@@ -132,6 +132,6 @@ pub fn download_file(url: String, path: String) -> ThreadData<DlStatut, ()> {
     ThreadData {
         id: rand::thread_rng().gen::<i128>(),
         receiver,
-        _thread: thread,
+        _thread: Some(thread),
     }
 }
