@@ -9,17 +9,28 @@ pub enum UCStatut {
     User(User),
     RequestError(String),
     ConnectionError(String),
+    OtherError(String),
+    Waiting,
 }
 
 #[derive(Debug)]
-pub struct UConnect<R, T> {
-    pub receiver: Receiver<R>,
-    pub _thread: JoinHandle<T>,
+pub struct UConnect {
+    receiver: Receiver<UCStatut>,
+    _thread: JoinHandle<()>,
 }
 
-impl<R, T> UConnect<R, T> {
-    pub fn message(&mut self) -> Result<R, TryRecvError> {
-        self.receiver.try_recv()
+impl UConnect {
+    pub fn message(&mut self) -> UCStatut {
+        match self.receiver.try_recv() {
+            Ok(r) => r,
+            Err(err) => {
+                if err == TryRecvError::Disconnected {
+                    UCStatut::OtherError(err.to_string())
+                } else {
+                    UCStatut::Waiting
+                }
+            }
+        }
     }
 }
 
@@ -89,7 +100,7 @@ async fn intern_connect(username: String, password: String, sender: Sender<UCSta
     }
 }
 
-pub fn connect_to_mojang(username: String, password: String) -> UConnect<UCStatut, ()> {
+pub fn connect_to_mojang(username: String, password: String) -> UConnect {
     let (sender, receiver) = channel(1);
     let thread = tokio::spawn(async move { intern_connect(username, password, sender).await });
 
