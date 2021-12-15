@@ -63,13 +63,23 @@ async fn intern_connect(username: String, password: String, sender: Sender<UCSta
             serde_json::from_str(&data).unwrap_or_default()
         }
         Err(err) => {
-            let _ = sender.send(UCStatut::Error(err.to_string())).await;
+            let _ = sender
+                .send(UCStatut::Error(format!(
+                    "Response Error: {}",
+                    err.to_string()
+                )))
+                .await;
             return;
         }
     };
 
     if let Some(error) = data["errorMessage"].as_str() {
-        let _ = sender.send(UCStatut::Error(error.to_string())).await;
+        let _ = sender
+            .send(UCStatut::Error(format!(
+                "Minecraft Account Error: {}",
+                err.to_string()
+            )))
+            .await;
     } else {
         let client_token = data["clientToken"].as_str().unwrap().to_string();
         let access_token = data["accessToken"].as_str().unwrap().to_string();
