@@ -36,7 +36,7 @@ async fn async_loop_dl_statut(td: &mut ThreadData<DlStatut, ()>, sender: &Sender
     }
 }
 
-async fn download_client(app: &MinecraftAuth, url: String, sender: &Sender<DlStatut>) {
+async fn download_client(_app: &MinecraftAuth, _url: String, _sender: &Sender<DlStatut>) {
     // download_file(url, format!("{}/client.jar", app.path));
 }
 
@@ -93,21 +93,22 @@ pub fn download_version(
     }
 }
 
-#[test]
 mod test {
     use super::download_version;
-    use crate::{downloader::DlStatut, MinecraftAuth};
-    use tokio::sync::mpsc::error::TryRecvError;
+    use crate::{
+        downloader::{DlStatut, ThreadStatut},
+        MinecraftAuth,
+    };
 
     #[test]
     fn dl_version() {
-        let app = MinecraftAuth::default();
+        let app = MinecraftAuth::new_just_name("Launcher".to_owned()).unwrap();
         let mut dl = download_version(&app, "https://launchermeta.mojang.com/v1/packages/b0bdc637e4c4cbf0501500cbaad5a757b04848ed/1.18.1.json".to_owned(), "1.18.1".to_owned());
 
         loop {
             match dl.message() {
                 Ok(r) => match r {
-                    DlStatut::Percentage(p) => println!("Percentage {}", r),
+                    DlStatut::Percentage(n, p) => println!("Percentage {}, {}", n, p),
                     DlStatut::Error(err) => {
                         println!("Error: {}", err);
                         break;
@@ -115,7 +116,7 @@ mod test {
                     DlStatut::Finish => break,
                 },
                 Err(err) => {
-                    if err = TryRecvError::Disconnected {
+                    if err == ThreadStatut::Closed {
                         break;
                     }
                 }

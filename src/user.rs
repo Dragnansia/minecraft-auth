@@ -148,10 +148,8 @@ pub fn connect_to_mojang(username: String, password: String) -> UConnect {
  * Work but it's not start on Tokio Runtime environment
  * and if Runtime::new() is used, the sender and the thread is closed/drop
  */
-#[test]
 mod test {
     use super::{connect_to_mojang, UCStatut, User};
-    use tokio::sync::mpsc::error::TryRecvError;
 
     #[test]
     fn mojang_connect() {
@@ -159,16 +157,11 @@ mod test {
 
         loop {
             match uconnect.message() {
-                Ok(statut) => {
-                    match statut {
-                        UCStatut::User(user) => assert_ne!(user, User::default()),
-                        UCStatut::Error(err) => assert!(false, "[ERROR] {}", err),
-                    };
-                    break;
-                }
-                Err(err) => {
-                    assert_ne!(err, TryRecvError::Disconnected);
-                }
+                UCStatut::User(user) => assert_ne!(user, User::default()),
+                UCStatut::RequestError(_) => todo!(),
+                UCStatut::ConnectionError(_) => todo!(),
+                UCStatut::OtherError(_) => todo!(),
+                UCStatut::Waiting => todo!(),
             }
         }
     }
