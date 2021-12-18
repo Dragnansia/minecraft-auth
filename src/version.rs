@@ -1,126 +1,82 @@
+use std::{fs::read_to_string, path::Path};
+
 use crate::{
-    downloader::{download_file, DlStatut, ThreadData, ThreadStatut},
+    downloader::{self, download_file, Downloader},
     MinecraftAuth,
 };
 use serde_json::Value;
-use std::{fs::read_to_string, path::Path};
-use tokio::sync::mpsc::{channel, Sender};
 
-pub fn update_manifest_version(
-    app: &MinecraftAuth,
-    force: bool,
-) -> Option<ThreadData<DlStatut, ()>> {
-    let path_mv = format!("{}/meta/minecraft/version_manifest.json", app.path);
-    if !Path::new(&path_mv).exists() || force {
-        Some(download_file(
-            "https://launchermeta.mojang.com/mc/game/version_manifest.json".to_owned(),
-            path_mv,
-        ))
+fn manifest_version(app: &MinecraftAuth, version: &str) -> Option<Value> {
+    let p = format!("{}/versions/{}.json", app.path, version);
+    let path = Path::new(&p);
+    if path.exists() && path.is_file() {
+        if let Ok(file_content) = read_to_string(path) {
+            Some(serde_json::from_str(&file_content).unwrap())
+        } else {
+            None
+        }
     } else {
         None
     }
 }
 
-async fn async_loop_dl_statut(td: &mut ThreadData<DlStatut, ()>, sender: &Sender<DlStatut>) {
-    loop {
-        match td.message() {
-            Ok(s) => {
-                let _ = sender.send(s).await;
-            }
-            Err(e) => {
-                if e == ThreadStatut::Closed {
-                    break;
+async fn download_manifest(app: &MinecraftAuth, url: &str, id: &str) -> Result<String, String> {
+    download_file(
+        url.to_string(),
+        format!("{}/versions/{}.json", app.path, id),
+        None,
+    )
+    .await
+}
+
+// async fn intern_download_version(app: &MinecraftAuth, _: Vec<(&str, &str)>) {}
+
+pub async fn download_version(app: &MinecraftAuth, version: String) {
+    if let Some(manifest) = manifest_version(app, "manifest_version") {
+        if let Some(versions) = manifest["versions"].as_array() {
+            for v in versions {
+                let id = v["id"].as_str().unwrap();
+                if version == id {
+                    if let Some(_) = manifest_version(app, id) {
+                        println!("manifest for {} is found", id);
+                    } else {
+                        let v_manifest = v["url"].as_str().unwrap();
+                        match download_manifest(app, v_manifest, id).await {
+                            Ok(_) => {}
+                            Err(err) => println!("[Error] {}", err),
+                        }
+                    }
                 }
             }
+        } else {
+            println!("Can't find versions on manifest json");
         }
+    } else {
+        println!("Can't find manifest");
     }
 }
 
-async fn download_client(_app: &MinecraftAuth, _url: String, _sender: &Sender<DlStatut>) {
-    // download_file(url, format!("{}/client.jar", app.path));
-}
-
-/// Download all file for a specifique version
-async fn intern_download_version(
-    app: MinecraftAuth,
-    url: String,
-    version: String,
-    sender: Sender<DlStatut>,
-) {
-    if let Some(mut up) = update_manifest_version(&app, false) {
-        async_loop_dl_statut(&mut up, &sender).await;
-    }
-
-    let vfile = format!("{}/meta/minecraft/{}/index.json", app.path, version);
-    let mut file = download_file(url, vfile.clone());
-    async_loop_dl_statut(&mut file, &sender).await;
-
-    match read_to_string(vfile) {
-        Ok(file) => {
-            match serde_json::from_str::<Value>(&file) {
-                Ok(json) => {
-                    println!("{:?}", json);
-                }
-                Err(err) => sender
-                    .send(DlStatut::Error(err.to_string()))
-                    .await
-                    .unwrap_or_default(),
-            };
-        }
-        Err(err) => sender
-            .send(DlStatut::Error(err.to_string()))
-            .await
-            .unwrap_or_default(),
-    }
-}
-
-/// Download a specifique version of the game
-/// Return the pourcentage of download version
-pub fn download_version(
-    app: &MinecraftAuth,
-    url: String,
-    version: String,
-) -> ThreadData<DlStatut, ()> {
-    let (tx, rx) = channel(1);
-    let appclone = app.clone();
-    let thread =
-        tokio::spawn(async move { intern_download_version(appclone, url, version, tx).await });
-
-    ThreadData {
-        id: rand::random::<i128>(),
-        receiver: rx,
-        _thread: Some(thread),
-    }
-}
-
+#[cfg(test)]
 mod test {
     use super::download_version;
     use crate::{
-        downloader::{DlStatut, ThreadStatut},
+        downloader::{self, Downloader},
         MinecraftAuth,
     };
+    use futures::executor::block_on;
 
     #[test]
     fn dl_version() {
-        let app = MinecraftAuth::new_just_name("Launcher".to_owned()).unwrap();
-        let mut dl = download_version(&app, "https://launchermeta.mojang.com/v1/packages/b0bdc637e4c4cbf0501500cbaad5a757b04848ed/1.18.1.json".to_owned(), "1.18.1".to_owned());
+        if let Some(app) = MinecraftAuth::new_just_name("Launcher".to_string()) {
+            let mut manifest = Downloader::new();
+            manifest.add_download(
+                "https://launchermeta.mojang.com/mc/game/version_manifest.json".to_owned(),
+                format!("{}/versions/manifest_version.json", app.path),
+                "manifest_download".to_owned(),
+            );
+            let dl = download_version(&app, "".to_string());
 
-        loop {
-            match dl.message() {
-                Ok(r) => match r {
-                    DlStatut::Percentage(n, p) => println!("Percentage {}, {}", n, p),
-                    DlStatut::Error(err) => {
-                        println!("Error: {}", err);
-                        break;
-                    }
-                    DlStatut::Finish => break,
-                },
-                Err(err) => {
-                    if err == ThreadStatut::Closed {
-                        break;
-                    }
-                }
-            }
+            block_on(dl);
         }
     }
 }
