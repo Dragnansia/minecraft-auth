@@ -1,74 +1,100 @@
 use futures::StreamExt;
-use rand::Rng;
 use reqwest::Client;
 use std::{
     cmp::min,
+    collections::VecDeque,
     fs::{create_dir_all, File},
     io::Write,
     path::Path,
+    sync::{Arc, Mutex},
 };
-use tokio::{
-    sync::mpsc::{channel, error::TryRecvError, Receiver, Sender},
-    task::JoinHandle,
-};
+use tokio::task::JoinHandle;
 
 #[derive(Debug)]
-pub enum DlStatut {
-    Percentage(String, u64),
-    Error(String),
-    Finish,
+struct DlInfo {
+    pub url: String,
+    pub path: String,
+    pub id: String,
 }
 
-#[derive(Debug, PartialEq)]
-pub enum ThreadStatut {
-    Closed,
-    Waiting,
+#[derive(Debug, Default, Clone)]
+pub struct DlStatut {
+    current_download: String,
+    percentage: u64,
 }
 
-/// Is used to know the current state of the thread
 #[derive(Debug)]
-pub struct ThreadData<R, T> {
-    /// ID of this ThreadData, generate with rand create
-    /// (!) need to find a way to get something like thread id
-    /// or other specifique information to thread or receiver
-    pub id: i128,
-
-    /// Receiver used to get message from thread
-    /// Return the specifique Type
-    pub receiver: Receiver<R>,
-
-    /// Thread used by Sender<R>, need to be store if we don't
-    /// a drop
-    pub _thread: Option<JoinHandle<T>>,
+pub struct Downloader {
+    tasks: Arc<Mutex<VecDeque<DlInfo>>>,
+    thread: Arc<Mutex<Option<JoinHandle<()>>>>,
+    current_state: Arc<Mutex<DlStatut>>,
 }
 
-impl<R, T> PartialEq for ThreadData<R, T> {
-    fn eq(&self, other: &Self) -> bool {
-        self.id == other.id
-    }
-}
-
-impl<R, T> ThreadData<R, T> {
-    /// The same if `self.receiver.try_recv()` is used
-    /// but with a different Error enum.
-    ///
-    /// You are sure to be a mutable reference to used
-    /// correct function
-    pub fn message(&mut self) -> Result<R, ThreadStatut> {
-        match self.receiver.try_recv() {
-            Ok(response) => Ok(response),
-            Err(err) => {
-                if err == TryRecvError::Disconnected {
-                    Err(ThreadStatut::Closed)
-                } else {
-                    Err(ThreadStatut::Waiting)
-                }
-            }
+impl Downloader {
+    pub fn new() -> Self {
+        Self {
+            tasks: Arc::new(Mutex::new(VecDeque::new())),
+            thread: Arc::new(Mutex::new(None)),
+            current_state: Arc::new(Mutex::new(DlStatut::default())),
         }
     }
+
+    pub fn add_download(&mut self, url: String, path: String, id: String) {
+        let task_id = id.clone();
+        self.tasks
+            .lock()
+            .unwrap()
+            .push_back(DlInfo { url, path, id });
+
+        println!("[Info] Task [{}] is add", task_id);
+        self.start_download();
+    }
+
+    pub fn start_download(&mut self) {
+        if self.thread.lock().unwrap().is_none() {
+            let tasks = Arc::clone(&self.tasks);
+            let thread = Arc::clone(&self.thread);
+            let dl_statut = Arc::clone(&self.current_state);
+
+            let thread_task = Some(tokio::spawn(async move {
+                loop {
+                    let t = tasks.lock().unwrap().pop_front();
+                    if let Some(dl_info) = t {
+                        println!("[Info] Task [{}] is start", dl_info.id);
+                        dl_statut.lock().unwrap().current_download = dl_info.path.clone();
+
+                        match download_file(dl_info.url, dl_info.path, Some(&dl_statut)).await {
+                            Ok(_) => println!("[Info] Task [{}] is finish", dl_info.id),
+                            Err(err) => println!("[Error] Task [{}] -> {}", dl_info.id, err),
+                        }
+                    } else {
+                        break;
+                    }
+                }
+
+                *thread.lock().unwrap() = None;
+            }));
+
+            *self.thread.lock().unwrap() = thread_task;
+        }
+    }
+
+    pub fn empty(&self) -> bool {
+        self.tasks.lock().unwrap().is_empty() && self.thread.lock().unwrap().is_none()
+    }
+
+    pub fn statut(&self) -> DlStatut {
+        self.current_state.lock().unwrap().clone()
+    }
 }
 
-fn just_path<'a>(path: &'a str) -> &'a str {
+impl Default for Downloader {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+fn just_path(path: &str) -> &str {
     let filename_size = path.split('/').last().unwrap().len();
     &path[..path.len() - filename_size]
 }
@@ -84,7 +110,11 @@ fn create_folder(folder: &str) {
     create_dir_all(folder).unwrap();
 }
 
-async fn intern_download_file(url: String, path: String, tx: Sender<DlStatut>) {
+pub async fn download_file(
+    url: String,
+    path: String,
+    dl_statut: Option<&Arc<Mutex<DlStatut>>>,
+) -> Result<String, String> {
     let client = Client::new();
     match client.get(&url).send().await {
         Ok(response) => {
@@ -92,46 +122,31 @@ async fn intern_download_file(url: String, path: String, tx: Sender<DlStatut>) {
             let mut file = match File::create(&path) {
                 Ok(fc) => fc,
                 Err(err) => {
-                    tx.send(DlStatut::Error(err.to_string())).await.unwrap();
-                    return;
+                    return Err(err.to_string());
                 }
             };
+
             let size = response.content_length().unwrap();
-            let mut percentage: u64 = 0;
+            let mut new: u64 = 0;
             let mut stream = response.bytes_stream();
 
             while let Some(item) = stream.next().await {
                 let chunk = item
-                    .map_err(|_| -> String { "Error while downloading file".to_string() })
+                    .map_err(|_| "Error while downloading file bytes".to_string())
                     .unwrap();
 
                 file.write(&chunk)
                     .map_err(|_| "Error while writing to file".to_string())
                     .unwrap();
 
-                percentage = min(percentage + (chunk.len() as u64), size);
-
-                let _ = tx
-                    .send(DlStatut::Percentage(path.clone(), percentage * 100 / size))
-                    .await;
+                new = min(new + (chunk.len() as u64), size);
+                if let Some(dl_statut) = dl_statut {
+                    dl_statut.lock().unwrap().percentage = new * 100 / size;
+                }
             }
 
-            let _ = tx.send(DlStatut::Finish).await;
+            Ok(path)
         }
-        Err(err) => {
-            let _ = tx.send(DlStatut::Error(err.to_string())).await;
-        }
-    };
-}
-
-/// Download one file and return a ThreadData
-pub fn download_file(url: String, path: String) -> ThreadData<DlStatut, ()> {
-    let (tx, receiver) = channel(1024);
-    let thread = tokio::spawn(async move { intern_download_file(url, path, tx).await });
-
-    ThreadData {
-        id: rand::thread_rng().gen::<i128>(),
-        receiver,
-        _thread: Some(thread),
+        Err(err) => Err(err.to_string()),
     }
 }
