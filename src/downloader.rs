@@ -23,6 +23,8 @@ pub struct DlStatut {
     percentage: u64,
 }
 
+pub type RefDownloader = Arc<Mutex<Downloader>>;
+
 #[derive(Debug)]
 pub struct Downloader {
     tasks: Arc<Mutex<VecDeque<DlInfo>>>,
@@ -37,6 +39,14 @@ impl Downloader {
             thread: Arc::new(Mutex::new(None)),
             current_state: Arc::new(Mutex::new(DlStatut::default())),
         }
+    }
+
+    pub fn new_ref() -> RefDownloader {
+        Arc::new(Mutex::new(Self {
+            tasks: Arc::new(Mutex::new(VecDeque::new())),
+            thread: Arc::new(Mutex::new(None)),
+            current_state: Arc::new(Mutex::new(DlStatut::default())),
+        }))
     }
 
     pub fn add_download(&mut self, url: String, path: String, id: String) {
@@ -75,6 +85,7 @@ impl Downloader {
                 *thread.lock().unwrap() = None;
             }));
 
+            println!("[Info] Task thread start");
             *self.thread.lock().unwrap() = thread_task;
         }
     }
@@ -85,6 +96,14 @@ impl Downloader {
 
     pub fn statut(&self) -> DlStatut {
         self.current_state.lock().unwrap().clone()
+    }
+
+    pub fn wait(&self) {
+        loop {
+            if self.empty() {
+                break;
+            }
+        }
     }
 }
 
