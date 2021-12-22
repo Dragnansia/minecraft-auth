@@ -4,9 +4,8 @@ use crate::{
     downloader::{download_file, RefDownloader},
     MinecraftAuth,
 };
-use futures::future::{join3, join_all};
+use futures::future::join3;
 use serde_json::Value;
-use tokio::join;
 
 fn manifest_version(app: &MinecraftAuth, version: &str) -> Option<Value> {
     let p = format!("{}/versions/{}.json", app.path, version);
@@ -115,9 +114,39 @@ async fn download_libraries(
     }
 }
 
-async fn download_client(app: &MinecraftAuth, client: &Value, downloader: &RefDownloader) {}
+async fn download_client(
+    app: &MinecraftAuth,
+    client: &Value,
+    downloader: &RefDownloader,
+    version: &str,
+) {
+    let path = format!("{}/clients/{}/client.jar", app.path, version);
+    downloader.lock().unwrap().add_download(
+        client["url"].as_str().unwrap().to_string(),
+        path.clone(),
+        path,
+    );
+}
 
-async fn download_assets(app: &MinecraftAuth, assets: &Value, downloader: &RefDownloader) {}
+async fn download_assets(app: &MinecraftAuth, assets: &Value, downloader: &RefDownloader) {
+    let id = format!("assets/{}", assets["id"].as_str().unwrap());
+
+    if let Ok(_) = download_manifest(app, assets["url"].as_str().unwrap(), &id).await {
+        if let Some(manifest) = manifest_version(app, &id) {
+            for m in manifest["objects"].as_object().unwrap() {
+                let hash = m.1["hash"].as_str().unwrap();
+                let f = &hash[..2];
+                let path = format!("{}/assets/objects/{}/{}", app.path, f, hash);
+                let url = format!("http://resources.download.minecraft.net/{}/{}", f, hash);
+
+                downloader
+                    .lock()
+                    .unwrap()
+                    .add_download(url, path.clone(), path);
+            }
+        }
+    }
+}
 
 async fn find_and_install_minecraft_version(
     app: &MinecraftAuth,
@@ -131,7 +160,8 @@ async fn find_and_install_minecraft_version(
             if version == id {
                 if let Some(m) = manifest_version(app, id) {
                     let lib = download_libraries(app, m["libraries"].as_array(), downloader);
-                    let client = download_client(app, &m["downloads"]["client"], downloader);
+                    let client =
+                        download_client(app, &m["downloads"]["client"], downloader, version);
                     let assets = download_assets(app, &m["assetIndex"], downloader);
 
                     join3(lib, client, assets).await;
@@ -142,12 +172,21 @@ async fn find_and_install_minecraft_version(
                             let m = manifest_version(app, id).unwrap();
                             let lib =
                                 download_libraries(app, m["libraries"].as_array(), downloader);
+                            let client = download_client(
+                                app,
+                                &m["downloads"]["client"],
+                                downloader,
+                                version,
+                            );
+                            let assets = download_assets(app, &m["assetIndex"], downloader);
 
-                            join!(lib);
+                            join3(lib, client, assets).await;
                         }
                         Err(err) => println!("[Error] {}", err),
                     }
                 }
+
+                break;
             }
         }
     } else {
