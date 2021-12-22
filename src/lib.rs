@@ -37,9 +37,3 @@ impl MinecraftAuth {
         }
     }
 }
-
-#[test]
-fn create_minecraft_auth() {
-    let app = MinecraftAuth::new_just_name("Launcher".to_owned(), true).unwrap();
-    println!("{:?}", app);
-}

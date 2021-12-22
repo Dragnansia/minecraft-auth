@@ -143,27 +143,3 @@ pub fn connect_to_mojang(username: String, password: String) -> UConnect {
         _thread: thread,
     }
 }
-
-/*
- * Work but it's not start on Tokio Runtime environment
- * and if Runtime::new() is used, the sender and the thread is closed/drop
- */
-#[cfg(test)]
-mod test {
-    use super::{connect_to_mojang, UCStatut, User};
-
-    #[test]
-    fn mojang_connect() {
-        let mut uconnect = connect_to_mojang("".to_owned(), "".to_owned());
-
-        loop {
-            match uconnect.message() {
-                UCStatut::User(user) => assert_ne!(user, User::default()),
-                UCStatut::RequestError(_) => todo!(),
-                UCStatut::ConnectionError(_) => todo!(),
-                UCStatut::OtherError(_) => todo!(),
-                UCStatut::Waiting => todo!(),
-            }
-        }
-    }
-}

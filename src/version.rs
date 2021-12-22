@@ -188,26 +188,3 @@ pub async fn download_version(app: &MinecraftAuth, version: String, downloader: 
         }
     }
 }
-
-#[cfg(test)]
-mod test {
-    use super::download_version;
-    use crate::{downloader::Downloader, MinecraftAuth};
-    use futures::executor::block_on;
-
-    #[test]
-    fn dl_version() {
-        if let Some(app) = MinecraftAuth::new_just_name("Launcher".to_string(), true) {
-            let mut manifest = Downloader::new();
-            manifest.add_download(
-                "https://launchermeta.mojang.com/mc/game/version_manifest.json".to_owned(),
-                format!("{}/versions/manifest_version.json", app.path),
-                "manifest_download".to_owned(),
-            );
-            let downloader = Downloader::new_ref();
-            let dl = download_version(&app, "".to_string(), downloader.clone());
-
-            block_on(dl);
-        }
-    }
-}
