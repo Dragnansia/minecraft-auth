@@ -1,7 +1,8 @@
 use crate::{
     downloader::Downloader,
     user::User,
-    version::{download_version, get_artifact, get_classifiers, manifest, os_native_name},
+    version::{download_version, get_artifact, get_classifiers, manifest},
+    native::os_native_name,
     MinecraftAuth,
 };
 use std::{

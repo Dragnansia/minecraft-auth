@@ -3,13 +3,13 @@ use std::{fs::read_to_string, path::Path};
 use crate::{
     downloader::{download_file, RefDownloader},
     MinecraftAuth,
+    native::os_native_name,
 };
 use futures::future::join3;
 use serde_json::Value;
 
-pub fn manifest(app: &MinecraftAuth, version: &str) -> Option<Value> {
-    let p = format!("{}/versions/{}.json", app.path, version);
-    let path = Path::new(&p);
+fn intern_manifest(p: &str) -> Option<Value> {
+    let path = Path::new(p);
     if path.exists() && path.is_file() {
         if let Ok(file_content) = read_to_string(path) {
             Some(serde_json::from_str(&file_content).unwrap())
@@ -21,18 +21,12 @@ pub fn manifest(app: &MinecraftAuth, version: &str) -> Option<Value> {
     }
 }
 
+pub fn manifest(app: &MinecraftAuth, version: &str) -> Option<Value> {
+    intern_manifest(&format!("{}/versions/{}.json", app.path, version))
+}
+
 pub fn version_manifest(app: &MinecraftAuth, version: &str) -> Option<Value> {
-    let p = format!("{}/assets/indexes/{}.json", app.path, version);
-    let path = Path::new(&p);
-    if path.exists() && path.is_file() {
-        if let Ok(file_content) = read_to_string(path) {
-            Some(serde_json::from_str(&file_content).unwrap())
-        } else {
-            None
-        }
-    } else {
-        None
-    }
+    intern_manifest(&format!("{}/assets/indexes/{}.json", app.path, version))
 }
 
 async fn download_manifest(app: &MinecraftAuth, url: &str, id: &str) -> Result<String, String> {
@@ -55,23 +49,6 @@ async fn download_manifest_version(
         None,
     )
     .await
-}
-
-// async fn intern_download_version(app: &MinecraftAuth, _: Vec<(&str, &str)>) {}
-
-#[cfg(target_os = "linux")]
-pub fn os_native_name() -> &'static str {
-    "natives-linux"
-}
-
-#[cfg(target_os = "windows")]
-pub fn os_native_name() -> &'static str {
-    "natives-windows"
-}
-
-#[cfg(target_os = "macos")]
-pub fn os_native_name() -> &'static str {
-    "natives-osx"
 }
 
 pub fn get_classifiers(val: &Value) -> Option<&Value> {

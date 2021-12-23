@@ -2,6 +2,7 @@ pub mod downloader;
 pub mod instance;
 pub mod user;
 pub mod version;
+pub mod native;
 
 #[derive(Clone, Debug)]
 pub struct MinecraftAuth {
