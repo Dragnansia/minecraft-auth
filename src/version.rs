@@ -60,17 +60,17 @@ async fn download_manifest_version(
 // async fn intern_download_version(app: &MinecraftAuth, _: Vec<(&str, &str)>) {}
 
 #[cfg(target_os = "linux")]
-fn os_native_name() -> &'static str {
+pub fn os_native_name() -> &'static str {
     "natives-linux"
 }
 
 #[cfg(target_os = "windows")]
-fn os_native_name() -> &'static str {
+pub fn os_native_name() -> &'static str {
     "natives-windows"
 }
 
 #[cfg(target_os = "macos")]
-fn os_native_name() -> &'static str {
+pub fn os_native_name() -> &'static str {
     "natives-osx"
 }
 
@@ -93,12 +93,15 @@ pub fn get_artifact(val: &Value) -> Option<&Value> {
 }
 
 fn add_download_with_lib_info(infos: &Value, lib_path: &str, downloader: &RefDownloader) {
-    let url = infos["url"].as_str().unwrap().to_string();
+    let url = infos["url"].as_str().unwrap();
     let path = format!("{}{}", lib_path, infos["path"].as_str().unwrap());
-    downloader
-        .lock()
-        .unwrap()
-        .add_download(url, path.clone(), path);
+    let file = Path::new(&path);
+    if !file.exists() {
+        downloader
+            .lock()
+            .unwrap()
+            .add_download(url.to_string(), path.clone(), path);
+    }
 }
 
 // Find a way to return a downloader to user with all download file
@@ -148,11 +151,13 @@ async fn download_client(
     version: &str,
 ) {
     let path = format!("{}/clients/{}/client.jar", app.path, version);
-    downloader.lock().unwrap().add_download(
-        client["url"].as_str().unwrap().to_string(),
-        path.clone(),
-        path,
-    );
+    if !Path::new(&path).exists() {
+        downloader.lock().unwrap().add_download(
+            client["url"].as_str().unwrap().to_string(),
+            path.clone(),
+            path,
+        );
+    }
 }
 
 async fn download_assets(app: &MinecraftAuth, assets: &Value, downloader: &RefDownloader) {
@@ -166,10 +171,12 @@ async fn download_assets(app: &MinecraftAuth, assets: &Value, downloader: &RefDo
                 let path = format!("{}/assets/objects/{}/{}", app.path, f, hash);
                 let url = format!("http://resources.download.minecraft.net/{}/{}", f, hash);
 
-                downloader
-                    .lock()
-                    .unwrap()
-                    .add_download(url, path.clone(), path);
+                if !Path::new(&path).exists() {
+                    downloader
+                        .lock()
+                        .unwrap()
+                        .add_download(url, path.clone(), path);
+                }
             }
         }
     }
