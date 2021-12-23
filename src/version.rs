@@ -7,8 +7,22 @@ use crate::{
 use futures::future::join3;
 use serde_json::Value;
 
-fn manifest_version(app: &MinecraftAuth, version: &str) -> Option<Value> {
+pub fn manifest(app: &MinecraftAuth, version: &str) -> Option<Value> {
     let p = format!("{}/versions/{}.json", app.path, version);
+    let path = Path::new(&p);
+    if path.exists() && path.is_file() {
+        if let Ok(file_content) = read_to_string(path) {
+            Some(serde_json::from_str(&file_content).unwrap())
+        } else {
+            None
+        }
+    } else {
+        None
+    }
+}
+
+pub fn version_manifest(app: &MinecraftAuth, version: &str) -> Option<Value> {
+    let p = format!("{}/assets/indexes/{}.json", app.path, version);
     let path = Path::new(&p);
     if path.exists() && path.is_file() {
         if let Ok(file_content) = read_to_string(path) {
@@ -25,6 +39,19 @@ async fn download_manifest(app: &MinecraftAuth, url: &str, id: &str) -> Result<S
     download_file(
         url.to_string(),
         format!("{}/versions/{}.json", app.path, id),
+        None,
+    )
+    .await
+}
+
+async fn download_manifest_version(
+    app: &MinecraftAuth,
+    url: &str,
+    id: &str,
+) -> Result<String, String> {
+    download_file(
+        url.to_string(),
+        format!("{}/assets/indexes/{}.json", app.path, id),
         None,
     )
     .await
@@ -47,7 +74,7 @@ fn os_native_name() -> &'static str {
     "natives-osx"
 }
 
-fn get_classifiers(val: &Value) -> Option<&Value> {
+pub fn get_classifiers(val: &Value) -> Option<&Value> {
     let classifiers = &val["downloads"]["classifiers"][os_native_name()];
     if classifiers.is_null() {
         None
@@ -56,7 +83,7 @@ fn get_classifiers(val: &Value) -> Option<&Value> {
     }
 }
 
-fn get_artifact(val: &Value) -> Option<&Value> {
+pub fn get_artifact(val: &Value) -> Option<&Value> {
     let artifact = &val["downloads"]["artifact"];
     if artifact.is_null() {
         None
@@ -129,10 +156,10 @@ async fn download_client(
 }
 
 async fn download_assets(app: &MinecraftAuth, assets: &Value, downloader: &RefDownloader) {
-    let id = format!("assets/{}", assets["id"].as_str().unwrap());
+    let id = assets["id"].as_str().unwrap();
 
-    if let Ok(_) = download_manifest(app, assets["url"].as_str().unwrap(), &id).await {
-        if let Some(manifest) = manifest_version(app, &id) {
+    if let Ok(_) = download_manifest_version(app, assets["url"].as_str().unwrap(), &id).await {
+        if let Some(manifest) = version_manifest(app, &id) {
             for m in manifest["objects"].as_object().unwrap() {
                 let hash = m.1["hash"].as_str().unwrap();
                 let f = &hash[..2];
@@ -151,14 +178,14 @@ async fn download_assets(app: &MinecraftAuth, assets: &Value, downloader: &RefDo
 async fn find_and_install_minecraft_version(
     app: &MinecraftAuth,
     version: &str,
-    manifest: &Value,
+    m: &Value,
     downloader: &RefDownloader,
 ) {
-    if let Some(versions) = manifest["versions"].as_array() {
+    if let Some(versions) = m["versions"].as_array() {
         for v in versions {
             let id = v["id"].as_str().unwrap();
             if version == id {
-                if let Some(m) = manifest_version(app, id) {
+                if let Some(m) = manifest(app, id) {
                     let lib = download_libraries(app, m["libraries"].as_array(), downloader);
                     let client =
                         download_client(app, &m["downloads"]["client"], downloader, version);
@@ -169,7 +196,7 @@ async fn find_and_install_minecraft_version(
                     let v_manifest = v["url"].as_str().unwrap();
                     match download_manifest(app, v_manifest, id).await {
                         Ok(_) => {
-                            let m = manifest_version(app, id).unwrap();
+                            let m = manifest(app, id).unwrap();
                             let lib =
                                 download_libraries(app, m["libraries"].as_array(), downloader);
                             let client = download_client(
@@ -206,7 +233,7 @@ async fn find_and_install_minecraft_version(
 /// downloader.lock().unwrap().wait();
 /// ```
 pub async fn download_version(app: &MinecraftAuth, version: String, downloader: RefDownloader) {
-    if let Some(manifest) = manifest_version(app, "manifest_version") {
+    if let Some(manifest) = manifest(app, "manifest_version") {
         find_and_install_minecraft_version(app, &version, &manifest, &downloader).await;
     } else {
         match download_manifest(
@@ -217,7 +244,7 @@ pub async fn download_version(app: &MinecraftAuth, version: String, downloader: 
         .await
         {
             Ok(_) => {
-                if let Some(manifest) = manifest_version(app, "manifest_version") {
+                if let Some(manifest) = manifest(app, "manifest_version") {
                     find_and_install_minecraft_version(app, &version, &manifest, &downloader).await;
                 } else {
                     println!("[Error] Can't find manifest_version file");
