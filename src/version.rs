@@ -1,12 +1,11 @@
-use std::{fs::read_to_string, path::Path};
-
 use crate::{
     downloader::{download_file, RefDownloader},
-    MinecraftAuth,
     native::os_native_name,
+    MinecraftAuth,
 };
 use futures::future::join3;
 use serde_json::Value;
+use std::{fs::read_to_string, path::Path};
 
 fn intern_manifest(p: &str) -> Option<Value> {
     let path = Path::new(p);
@@ -29,26 +28,8 @@ pub fn version_manifest(app: &MinecraftAuth, version: &str) -> Option<Value> {
     intern_manifest(&format!("{}/assets/indexes/{}.json", app.path, version))
 }
 
-async fn download_manifest(app: &MinecraftAuth, url: &str, id: &str) -> Result<String, String> {
-    download_file(
-        url.to_string(),
-        format!("{}/versions/{}.json", app.path, id),
-        None,
-    )
-    .await
-}
-
-async fn download_manifest_version(
-    app: &MinecraftAuth,
-    url: &str,
-    id: &str,
-) -> Result<String, String> {
-    download_file(
-        url.to_string(),
-        format!("{}/assets/indexes/{}.json", app.path, id),
-        None,
-    )
-    .await
+async fn download_manifest(path: &str, url: &str, id: &str) -> Result<String, String> {
+    download_file(url.to_string(), format!("{}/{}.json", path, id), None).await
 }
 
 pub fn get_classifiers(val: &Value) -> Option<&Value> {
@@ -116,7 +97,7 @@ async fn download_libraries(
                         a["name"]
                     );
                 }
-            });
+            })
         }
     }
 }
@@ -140,19 +121,17 @@ async fn download_client(
 async fn download_assets(app: &MinecraftAuth, assets: &Value, downloader: &RefDownloader) {
     let id = assets["id"].as_str().unwrap();
 
-    if let Ok(_) = download_manifest_version(app, assets["url"].as_str().unwrap(), &id).await {
+    let path = format!("{}/assets/", app.path);
+    if let Ok(_) = download_manifest(&path, assets["url"].as_str().unwrap(), &id).await {
         if let Some(manifest) = version_manifest(app, &id) {
             for m in manifest["objects"].as_object().unwrap() {
                 let hash = m.1["hash"].as_str().unwrap();
                 let f = &hash[..2];
-                let path = format!("{}/assets/objects/{}/{}", app.path, f, hash);
+                let p = format!("{}/objects/{}/{}", path, f, hash);
                 let url = format!("http://resources.download.minecraft.net/{}/{}", f, hash);
 
                 if !Path::new(&path).exists() {
-                    downloader
-                        .lock()
-                        .unwrap()
-                        .add_download(url, path.clone(), path);
+                    downloader.lock().unwrap().add_download(url, p.clone(), p);
                 }
             }
         }
@@ -177,8 +156,8 @@ async fn find_and_install_minecraft_version(
 
                     join3(lib, client, assets).await;
                 } else {
-                    let v_manifest = v["url"].as_str().unwrap();
-                    match download_manifest(app, v_manifest, id).await {
+                    let path = format!("{}/versions/", app.path);
+                    match download_manifest(&path, v["url"].as_str().unwrap(), id).await {
                         Ok(_) => {
                             let m = manifest(app, id).unwrap();
                             let lib =
@@ -220,8 +199,9 @@ pub async fn download_version(app: &MinecraftAuth, version: String, downloader: 
     if let Some(manifest) = manifest(app, "manifest_version") {
         find_and_install_minecraft_version(app, &version, &manifest, &downloader).await;
     } else {
+        let path = format!("{}/versions", app.path);
         match download_manifest(
-            app,
+            &path,
             "https://launchermeta.mojang.com/mc/game/version_manifest.json",
             "manifest_version",
         )
