@@ -71,34 +71,15 @@ async fn download_libraries(
     let lib_path = format!("{}/libraries/", app.path);
 
     if let Some(array) = libs {
-        if app.used_native {
-            array.iter().for_each(|a| {
-                if let Some(artifact) = get_artifact(&a) {
-                    add_download_with_lib_info(artifact, &lib_path, downloader);
-                } else if let Some(classifiers) = get_classifiers(&a) {
-                    add_download_with_lib_info(classifiers, &lib_path, downloader);
-                } else {
-                    println!(
-                        "[Error] can't find artifact or classifiers on section for {:?}",
-                        a["name"]
-                    );
-                }
-            });
-        } else {
-            // Update this to download just os specific file
-            array.iter().for_each(|a| {
-                if let Some(artifact) = get_classifiers(&a) {
-                    add_download_with_lib_info(artifact, &lib_path, &downloader);
-                } else if let Some(classifiers) = get_artifact(&a) {
-                    add_download_with_lib_info(classifiers, &lib_path, &downloader);
-                } else {
-                    println!(
-                        "[Error] can't find artifact or classifiers on section for {:?}",
-                        a["name"]
-                    );
-                }
-            })
-        }
+        array.iter().for_each(|a| {
+            if let Some(artifact) = get_artifact(&a) {
+                add_download_with_lib_info(artifact, &lib_path, downloader);
+            }
+
+            if let Some(classifiers) = get_classifiers(&a) {
+                add_download_with_lib_info(classifiers, &lib_path, downloader);
+            }
+        });
     }
 }
 
@@ -121,16 +102,17 @@ async fn download_client(
 async fn download_assets(app: &MinecraftAuth, assets: &Value, downloader: &RefDownloader) {
     let id = assets["id"].as_str().unwrap();
 
-    let path = format!("{}/assets/", app.path);
-    if let Ok(_) = download_manifest(&path, assets["url"].as_str().unwrap(), &id).await {
+    let path = format!("{}/assets", app.path);
+    if let Ok(_) = download_manifest(&format!("{}/indexes/", path), assets["url"].as_str().unwrap(), &id).await {
         if let Some(manifest) = version_manifest(app, &id) {
+            println!("Hey Everyone");
             for m in manifest["objects"].as_object().unwrap() {
                 let hash = m.1["hash"].as_str().unwrap();
                 let f = &hash[..2];
                 let p = format!("{}/objects/{}/{}", path, f, hash);
                 let url = format!("http://resources.download.minecraft.net/{}/{}", f, hash);
 
-                if !Path::new(&path).exists() {
+                if !Path::new(&p).exists() {
                     downloader.lock().unwrap().add_download(url, p.clone(), p);
                 }
             }
