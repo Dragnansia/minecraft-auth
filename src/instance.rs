@@ -1,8 +1,9 @@
 use crate::{
     downloader::Downloader,
-    user::User,
-    version::{download_version, get_artifact, get_classifiers, manifest},
     native::os_native_name,
+    user::User,
+    utils::scan,
+    version::{download_version, get_artifact, get_classifiers, manifest},
     MinecraftAuth,
 };
 use std::{
@@ -14,13 +15,6 @@ use std::{
 };
 use subprocess::{Exec, Popen, PopenError};
 use zip::ZipArchive;
-
-macro_rules! scan {
-    ( $string:expr, $sep:expr, $( $x:ty ),+ ) => {{
-        let mut iter = $string.split($sep);
-        ($(iter.next().and_then(|word| word.parse::<$x>().ok()),)*)
-    }}
-}
 
 #[derive(Debug)]
 pub enum InstanceCreateError {
