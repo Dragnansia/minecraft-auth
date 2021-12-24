@@ -6,6 +6,7 @@ use crate::{
     version::{download_version, get_artifact, get_classifiers, manifest},
     MinecraftAuth,
 };
+use serde_json::Value;
 use std::{
     collections::HashMap,
     fs::{create_dir_all, File},
@@ -21,6 +22,7 @@ pub enum InstanceCreateError {
     AlreadyExist,
     FolderCreateError,
     ReadConfigError,
+    NoFoundManifestVersion,
 }
 
 #[derive(Debug, Default)]
@@ -66,42 +68,54 @@ pub struct Instance {
 }
 
 impl Instance {
-    pub fn new(
-        name: String,
-        path: String,
-        game_dir: String,
-        assets_dir: String,
-        libs: String,
-        native_dir: String,
-        class_name: String,
-        version: String,
-        asset_index: String,
-        version_type: String,
-        ram_min: i32,
-        ram_max: i32,
-        window_width: i32,
-        window_height: i32,
-        current_language: String,
-    ) -> Self {
-        Self {
-            name,
-            path,
-            game_dir,
-            assets_dir,
-            libs,
-            native_dir,
-            asset_index,
-            class_name,
-            version,
-            version_type,
-            ram_min,
-            ram_max,
-            window_width,
-            window_height,
-            current_language,
+    /// Create new instance
+    pub async fn new(
+        app: &MinecraftAuth,
+        name: &str,
+        version: &str,
+    ) -> Result<Self, InstanceCreateError> {
+        let path = format!("{}/instances/{}", app.path, &name);
+        if Path::new(&path).exists() {
+            Instance::from_config(app, name)
+        } else {
+            if let Ok(_) = create_dir_all(&path) {
+                let downloader = Downloader::new_ref();
+                download_version(app, version.to_string(), downloader.clone()).await;
+                downloader.lock().unwrap().wait();
+
+                if let Some(manifest) = manifest(app, version) {
+                    install_natives_file(app, &path, &manifest);
+
+                    let new_instance = Self {
+                        name: name.to_string(),
+                        path: path.clone(),
+                        game_dir: format!("{}/.minecraft", path),
+                        native_dir: format!("{}/natives", path),
+                        class_name: manifest["mainClass"].as_str().unwrap().to_string(),
+                        assets_dir: format!("{}/assets", app.path),
+                        asset_index: manifest["assets"].as_str().unwrap().to_string(),
+                        version: version.to_string(),
+                        version_type: manifest["type"].as_str().unwrap().to_string(),
+                        libs: get_all_libs_of_version(app, version.clone()),
+                        ram_min: 512,
+                        ram_max: 1024,
+                        window_width: 1280,
+                        window_height: 720,
+                        current_language: "en".to_string(),
+                    };
+                    new_instance.update_config();
+
+                    Ok(new_instance)
+                } else {
+                    Err(InstanceCreateError::NoFoundManifestVersion)
+                }
+            } else {
+                Err(InstanceCreateError::FolderCreateError)
+            }
         }
     }
 
+    /// Return vec with all arguments for start instance
     pub fn args(&self, app: &MinecraftAuth, user: &User) -> Vec<String> {
         vec![
             format!("-Xms{}m", self.ram_min),
@@ -138,13 +152,13 @@ impl Instance {
         let p = format!("{}/config.cfg", self.path);
         match File::create(p) {
             Ok(mut file) => {
-                let _ = file.write_all(self.config_to_byte().as_bytes());
+                let _ = file.write_all(self.config_to_string().as_bytes());
             }
             Err(err) => println!("[Error] {:?}", err),
         };
     }
 
-    fn config_to_byte(&self) -> String {
+    fn config_to_string(&self) -> String {
         let mut s = format!("name={}\n", self.name);
         s += &format!("path={}\n", self.path);
         s += &format!("game_dir={}\n", self.game_dir);
@@ -163,6 +177,7 @@ impl Instance {
         s
     }
 
+    /// Load instance from config file
     pub fn from_config(app: &MinecraftAuth, name: &str) -> Result<Self, InstanceCreateError> {
         let p = format!("{}/instances/{}/config.cfg", app.path, name);
         match File::open(&p) {
@@ -196,74 +211,31 @@ impl Instance {
             Err(_) => Err(InstanceCreateError::ReadConfigError),
         }
     }
-
-    pub async fn create_new_instance(
-        app: &MinecraftAuth,
-        name: &str,
-        version: &str,
-    ) -> Result<Self, InstanceCreateError> {
-        let path = format!("{}/instances/{}", app.path, &name);
-        if Path::new(&path).exists() {
-            Instance::from_config(app, name)
-        } else {
-            if let Ok(_) = create_dir_all(&path) {
-                let downloader = Downloader::new_ref();
-                download_version(app, version.to_string(), downloader.clone()).await;
-                downloader.lock().unwrap().wait();
-
-                install_natives_file(app, &path, version);
-
-                let new_instance = Self {
-                    name: name.to_string(),
-                    path: path.clone(),
-                    game_dir: format!("{}/.minecraft", path),
-                    native_dir: format!("{}/natives", path),
-                    class_name: "net.minecraft.client.main.Main".to_string(),
-                    assets_dir: format!("{}/assets", app.path),
-                    asset_index: "1.12".to_string(),
-                    version: version.to_string(),
-                    version_type: "vanilla".to_string(),
-                    libs: get_all_libs_of_version(app, version.clone()),
-                    ram_min: 512,
-                    ram_max: 1024,
-                    window_width: 800,
-                    window_height: 600,
-                    current_language: "en".to_string(),
-                };
-                new_instance.update_config();
-
-                Ok(new_instance)
-            } else {
-                Err(InstanceCreateError::FolderCreateError)
-            }
-        }
-    }
 }
 
-fn install_natives_file(app: &MinecraftAuth, instance_path: &str, version: &str) {
-    if let Some(manifest) = manifest(app, version) {
-        let native_dir = format!("{}/natives", instance_path);
-        for libs in manifest["libraries"].as_array().unwrap() {
-            let classifiers = &libs["downloads"]["classifiers"];
-            if !classifiers.is_null() {
-                let native = &classifiers[os_native_name()];
-                if native.is_null() {
-                    continue;
-                }
+/// Install natives files on `{instance_path}/natives`
+fn install_natives_file(app: &MinecraftAuth, instance_path: &str, manifest: &Value) {
+    let native_dir = format!("{}/natives", instance_path);
+    for libs in manifest["libraries"].as_array().unwrap() {
+        let classifiers = &libs["downloads"]["classifiers"];
+        if !classifiers.is_null() {
+            let native = &classifiers[os_native_name()];
+            if native.is_null() {
+                continue;
+            }
 
-                let file_path = format!(
-                    "{}/libraries/{}",
-                    app.path,
-                    native["path"].as_str().unwrap()
-                );
-                match File::open(file_path) {
-                    Ok(file) => {
-                        let mut zip = ZipArchive::new(file).unwrap();
-                        let _ = zip.extract(native_dir.clone());
-                    }
-                    Err(err) => {
-                        println!("[Error] {}", err)
-                    }
+            let file_path = format!(
+                "{}/libraries/{}",
+                app.path,
+                native["path"].as_str().unwrap()
+            );
+            match File::open(file_path) {
+                Ok(file) => {
+                    let mut zip = ZipArchive::new(file).unwrap();
+                    let _ = zip.extract(native_dir.clone());
+                }
+                Err(err) => {
+                    println!("[Error] {}", err)
                 }
             }
         }
