@@ -105,7 +105,6 @@ async fn download_assets(app: &MinecraftAuth, assets: &Value, downloader: &RefDo
     let path = format!("{}/assets", app.path);
     if let Ok(_) = download_manifest(&format!("{}/indexes/", path), assets["url"].as_str().unwrap(), &id).await {
         if let Some(manifest) = version_manifest(app, &id) {
-            println!("Hey Everyone");
             for m in manifest["objects"].as_object().unwrap() {
                 let hash = m.1["hash"].as_str().unwrap();
                 let f = &hash[..2];
