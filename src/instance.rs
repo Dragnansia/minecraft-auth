@@ -229,6 +229,7 @@ fn install_natives_file(app: &MinecraftAuth, instance_path: &str, manifest: &Val
                 app.path,
                 native["path"].as_str().unwrap()
             );
+
             match File::open(file_path) {
                 Ok(file) => {
                     let mut zip = ZipArchive::new(file).unwrap();
@@ -301,8 +302,7 @@ pub fn get_all_libs_of_version(app: &MinecraftAuth, version: &str) -> String {
 
 /// Not a secure approch of this
 pub fn si(app: &MinecraftAuth, user: &User, i: &Instance) -> Result<Popen, PopenError> {
-    let mut cmd =
-        String::from("/usr/lib/jvm/java-1.8.0-openjdk-1.8.0.312.b07-2.fc35.x86_64/jre/bin/java ");
+    let mut cmd = String::from("java ");
 
     for el in i.args(app, user) {
         cmd += &format!("{} ", el);
@@ -312,18 +312,10 @@ pub fn si(app: &MinecraftAuth, user: &User, i: &Instance) -> Result<Popen, Popen
 }
 
 /// Try to used this
+/// Find better java version for version
 pub fn start_instance(app: &MinecraftAuth, user: &User, i: &Instance) -> io::Result<Child> {
-    let mut cmd =
-        Command::new("/usr/lib/jvm/java-1.8.0-openjdk-1.8.0.312.b07-2.fc35.x86_64/jre/bin/java");
+    let mut cmd = Command::new("java");
     let spawn = cmd.args(i.args(app, user));
-
-    println!("\n\n");
-
-    for x in spawn.get_args() {
-        println!("{}", x.to_str().unwrap());
-    }
-
-    println!("\n\n");
 
     spawn.spawn()
 }

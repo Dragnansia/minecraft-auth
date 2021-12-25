@@ -1,4 +1,5 @@
 pub mod downloader;
+pub mod handle;
 pub mod instance;
 pub mod native;
 pub mod user;

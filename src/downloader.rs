@@ -1,3 +1,4 @@
+use crate::handle::main_handle;
 use futures::StreamExt;
 use reqwest::Client;
 use std::{
@@ -66,11 +67,12 @@ impl Downloader {
             let thread = Arc::clone(&self.thread);
             let dl_statut = Arc::clone(&self.current_state);
 
-            let thread_task = Some(tokio::spawn(async move {
+            let thread_task = Some(main_handle().spawn(async move {
                 loop {
                     let t = tasks.lock().unwrap().pop_front();
                     if let Some(dl_info) = t {
-                        println!("[Info] Task [{}] is start", dl_info.id);
+                        let remain = tasks.lock().unwrap().len();
+                        println!("[Info] Task [{}] is start, in queue {}", dl_info.id, remain);
                         dl_statut.lock().unwrap().current_download = dl_info.path.clone();
 
                         match download_file(dl_info.url, dl_info.path, Some(&dl_statut)).await {
@@ -82,6 +84,7 @@ impl Downloader {
                     }
                 }
 
+                println!("[Info] Tasks End");
                 *thread.lock().unwrap() = None;
             }));
 
