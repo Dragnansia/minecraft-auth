@@ -25,7 +25,7 @@ pub enum InstanceCreateError {
     NoFoundManifestVersion,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct Instance {
     /// This is the name of the folder content
     /// minecraft file of this instance

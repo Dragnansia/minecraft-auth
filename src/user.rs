@@ -66,7 +66,7 @@ impl UConnect {
 }
 
 /// Minecraft user information for playing game
-#[derive(Debug, PartialEq, PartialOrd, Default)]
+#[derive(Debug, PartialEq, PartialOrd, Default, Clone)]
 pub struct User {
     /// Email or Pseudo
     pub username: String,
