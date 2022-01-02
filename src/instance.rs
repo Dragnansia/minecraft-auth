@@ -1,5 +1,5 @@
 use crate::{
-    downloader::Downloader,
+    downloader::RefDownloader,
     native::os_native_name,
     user::User,
     utils::scan,
@@ -73,13 +73,13 @@ impl Instance {
         app: &MinecraftAuth,
         name: &str,
         version: &str,
+        downloader: RefDownloader,
     ) -> Result<Self, InstanceCreateError> {
         let path = format!("{}/instances/{}", app.path, &name);
         if Path::new(&path).exists() {
             Instance::from_config(app, name)
         } else {
             if let Ok(_) = create_dir_all(&path) {
-                let downloader = Downloader::new_ref();
                 download_version(app, version.to_string(), downloader.clone()).await;
                 downloader.lock().unwrap().wait();
 
