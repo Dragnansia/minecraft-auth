@@ -3,6 +3,7 @@ use reqwest::Client;
 use std::{
     fs::{create_dir_all, File},
     io::Write,
+    iter::Sum,
     path::Path,
 };
 
@@ -11,6 +12,12 @@ pub struct FileInfo {
     pub url: String,
     pub path: String,
     pub size: u64,
+}
+
+impl Sum<FileInfo> for u64 {
+    fn sum<I: Iterator<Item = FileInfo>>(iter: I) -> Self {
+        iter.map(|v| v.size).collect::<Vec<u64>>().iter().sum()
+    }
 }
 
 impl FileInfo {
