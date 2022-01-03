@@ -1,9 +1,9 @@
 use crate::{
-    downloader::RefDownloader,
+    downloader::FileInfo,
     native::os_native_name,
     user::User,
     utils::scan,
-    version::{download_version, get_artifact, get_classifiers, manifest},
+    version::{get_artifact, get_classifiers, manifest},
     MinecraftAuth,
 };
 use serde_json::Value;
@@ -23,6 +23,7 @@ pub enum InstanceCreateError {
     FolderCreateError,
     ReadConfigError,
     NoFoundManifestVersion,
+    NeedDownload(Vec<FileInfo>),
 }
 
 #[derive(Debug, Default, Clone)]
@@ -73,16 +74,12 @@ impl Instance {
         app: &MinecraftAuth,
         name: &str,
         version: &str,
-        downloader: RefDownloader,
     ) -> Result<Self, InstanceCreateError> {
         let path = format!("{}/instances/{}", app.path, &name);
         if Path::new(&path).exists() {
             Instance::from_config(app, name)
         } else {
             if let Ok(_) = create_dir_all(&path) {
-                download_version(app, version.to_string(), downloader.clone()).await;
-                downloader.lock().unwrap().wait();
-
                 if let Some(manifest) = manifest(app, version) {
                     install_natives_file(app, &path, &manifest);
 
