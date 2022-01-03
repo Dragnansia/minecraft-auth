@@ -4,7 +4,10 @@ use crate::{
     MinecraftAuth,
 };
 use serde_json::Value;
-use std::{fs::read_to_string, path::Path};
+use std::{
+    fs::{read_to_string, File},
+    path::Path,
+};
 
 fn intern_manifest(p: &str) -> Option<Value> {
     let path = Path::new(p);
@@ -54,7 +57,7 @@ fn add_download_with_lib_info(infos: &Value, lib_path: &str, files: &mut Vec<Fil
     let path = format!("{}{}", lib_path, infos["path"].as_str().unwrap());
     let size = infos["size"].as_u64().unwrap();
     let file = Path::new(&path);
-    if !file.exists() {
+    if !file.exists() || File::open(&path).unwrap().metadata().unwrap().len() != size {
         files.push(FileInfo::new(url.to_string(), path, size));
     }
 }
@@ -87,11 +90,12 @@ async fn download_client(
     files: &mut Vec<FileInfo>,
 ) {
     let path = format!("{}/clients/{}/client.jar", app.path, version);
-    if !Path::new(&path).exists() {
+    let size = client["size"].as_u64().unwrap();
+    if !Path::new(&path).exists() || File::open(&path).unwrap().metadata().unwrap().len() != size {
         files.push(FileInfo::new(
             client["url"].as_str().unwrap().to_string(),
             path,
-            client["size"].as_u64().unwrap(),
+            size,
         ));
     }
 }
@@ -115,7 +119,9 @@ async fn download_assets(app: &MinecraftAuth, assets: &Value, files: &mut Vec<Fi
                 let url = format!("http://resources.download.minecraft.net/{}/{}", f, hash);
                 let size = m.1["size"].as_u64().unwrap();
 
-                if !Path::new(&p).exists() {
+                if !Path::new(&p).exists()
+                    || File::open(&p).unwrap().metadata().unwrap().len() != size
+                {
                     files.push(FileInfo::new(url.to_string(), p, size));
                 }
             }
@@ -164,7 +170,7 @@ async fn find_and_install_minecraft_version(
 /// # Examples
 /// ```
 /// ```
-pub async fn find_file_for_version(app: &MinecraftAuth, version: String) -> Vec<FileInfo> {
+pub async fn file_to_download_for_version(app: &MinecraftAuth, version: String) -> Vec<FileInfo> {
     let mut files = vec![];
 
     if let Some(manifest) = manifest(app, "manifest_version") {
