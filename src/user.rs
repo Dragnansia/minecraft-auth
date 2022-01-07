@@ -143,12 +143,7 @@ impl User {
             let root: Value = serde_json::from_str(&content).unwrap();
             let el = match root {
                 Value::Object(mut r) => {
-                    if r["users"].is_null() {
-                        let mut user = Map::new();
-                        user.insert(self.username.clone(), Value::Object(self.convert_to_map()));
-
-                        r.insert("users".to_string(), Value::Object(user));
-                    } else {
+                    if r.get("users").is_some() {
                         if let Value::Object(users) = &mut r["users"] {
                             if let Value::Object(user) = &mut users[&self.username] {
                                 user["uuid"] = Value::String(self.uuid.clone());
@@ -164,6 +159,11 @@ impl User {
                                 users.insert(self.username.clone(), Value::Object(user));
                             }
                         }
+                    } else {
+                        let mut user = Map::new();
+                        user.insert(self.username.clone(), Value::Object(self.convert_to_map()));
+
+                        r.insert("users".to_string(), Value::Object(user));
                     }
 
                     Value::Object(r)
