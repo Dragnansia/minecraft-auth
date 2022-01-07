@@ -131,7 +131,7 @@ impl User {
             .read(true)
             .write(true)
             .create(true)
-            .open(format!("{}/users/all.json", app.path))
+            .open(format!("{}/users_accounts.json", app.path))
         {
             let mut content = String::new();
             file.read_to_string(&mut content).unwrap();
