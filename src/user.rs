@@ -102,13 +102,8 @@ impl User {
         let path = Path::new(&p);
         if path.exists() && path.is_file() {
             if let Ok(file_content) = read_to_string(path) {
-                let json: Value = serde_json::from_str(&file_content).unwrap();
-                let arr = json["users"].as_array().unwrap();
-
-                if let Some(user) = arr
-                    .iter()
-                    .find(|u| u["username"].as_str().unwrap() == username)
-                {
+                let root: Value = serde_json::from_str(&file_content).unwrap();
+                if let Some(user) = root["users"].get(&username) {
                     Some(Self {
                         username,
                         uuid: user["uuid"].as_str().unwrap().to_string(),
