@@ -10,11 +10,11 @@ use serde_json::Value;
 use std::{
     collections::HashMap,
     fs::{create_dir_all, File},
-    io::{self, BufRead, BufReader, Write},
+    io::{self, BufRead, BufReader, Read, Write},
     path::Path,
     process::{Child, Command},
 };
-use subprocess::{Exec, Popen, PopenError};
+use subprocess::{Exec, PopenError};
 use zip::ZipArchive;
 
 #[derive(Debug)]
@@ -298,14 +298,14 @@ pub fn get_all_libs_of_version(app: &MinecraftAuth, version: &str) -> String {
 }
 
 /// Not a secure approch of this
-pub fn si(app: &MinecraftAuth, user: &User, i: &Instance) -> Result<Popen, PopenError> {
+pub fn si(app: &MinecraftAuth, user: &User, i: &Instance) -> Result<impl Read, PopenError> {
     let mut cmd = String::from("java ");
 
     for el in i.args(app, user) {
         cmd += &format!("{} ", el);
     }
 
-    Exec::shell(cmd).popen()
+    Exec::shell(cmd).stream_stdout()
 }
 
 /// Try to used this
