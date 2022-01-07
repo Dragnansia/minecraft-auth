@@ -1,5 +1,11 @@
+use crate::MinecraftAuth;
 use reqwest::Client;
 use serde_json::Value;
+use std::{
+    fs::{read_to_string, File},
+    io::{Read, Write},
+    path::Path,
+};
 use tokio::{
     sync::mpsc::{channel, error::TryRecvError, Receiver, Sender},
     task::JoinHandle,
@@ -88,6 +94,63 @@ impl User {
             uuid,
             client_token,
             access_token,
+        }
+    }
+
+    pub fn from_config(app: &MinecraftAuth, username: String) -> Option<Self> {
+        let p = format!("{}/users/all.json", app.path);
+        let path = Path::new(&p);
+        if path.exists() && path.is_file() {
+            if let Ok(file_content) = read_to_string(path) {
+                let json: Value = serde_json::from_str(&file_content).unwrap();
+                let arr = json["users"].as_array().unwrap();
+
+                if let Some(user) = arr
+                    .iter()
+                    .find(|u| u["username"].as_str().unwrap() == username)
+                {
+                    Some(Self {
+                        username,
+                        uuid: user["uuid"].as_str().unwrap().to_string(),
+                        client_token: user["client_token"].as_str().unwrap().to_string(),
+                        access_token: user["access_token"].as_str().unwrap().to_string(),
+                    })
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    }
+
+    pub fn save_on_file(&self, app: &MinecraftAuth) {
+        if let Ok(mut file) = File::options()
+            .read(true)
+            .write(true)
+            .open(format!("{}/users/all.json", app.path))
+        {
+            let mut content = String::new();
+            file.read_to_string(&mut content).unwrap();
+
+            let root: Value = serde_json::from_str(&content).unwrap();
+            let el = match root {
+                Value::Object(mut r) => {
+                    r["users"][self.username.clone()]["uuid"] = Value::String(self.uuid.clone());
+                    r["users"][self.username.clone()]["access_token"] =
+                        Value::String(self.access_token.clone());
+                    r["users"][self.username.clone()]["client_token"] =
+                        Value::String(self.client_token.clone());
+
+                    Value::Object(r)
+                }
+                v => v.clone(),
+            };
+
+            let new_content = serde_json::to_string(&el).unwrap();
+            file.write_all(new_content.as_bytes()).unwrap();
         }
     }
 }
