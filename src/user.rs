@@ -130,6 +130,7 @@ impl User {
         if let Ok(mut file) = File::options()
             .read(true)
             .write(true)
+            .create(true)
             .open(format!("{}/users/all.json", app.path))
         {
             let mut content = String::new();
