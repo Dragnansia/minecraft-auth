@@ -301,11 +301,11 @@ pub fn get_all_libs_of_version(app: &MinecraftAuth, version: &str) -> String {
 pub fn si(app: &MinecraftAuth, user: &User, i: &Instance) -> Result<impl Read, PopenError> {
     let mut cmd = String::from("java ");
 
-    for el in i.args(app, user) {
-        cmd += &format!("{} ", el);
-    }
+    i.args(app, user)
+        .iter()
+        .for_each(|el| cmd += &format!("{} ", el));
 
-    Exec::shell(cmd).stream_stdout()
+    Exec::shell(cmd).detached().stream_stdout()
 }
 
 /// Try to used this
