@@ -136,6 +136,10 @@ impl User {
             let mut content = String::new();
             file.read_to_string(&mut content).unwrap();
 
+            if content.is_empty() {
+                content += "{}";
+            }
+
             let root: Value = serde_json::from_str(&content).unwrap();
             let el = match root {
                 Value::Object(mut r) => {
