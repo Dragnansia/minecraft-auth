@@ -98,7 +98,7 @@ impl User {
     }
 
     pub fn from_config(app: &MinecraftAuth, username: String) -> Option<Self> {
-        let p = format!("{}/users/all.json", app.path);
+        let p = format!("{}/users_accounts.json", app.path);
         let path = Path::new(&p);
         if path.exists() && path.is_file() {
             if let Ok(file_content) = read_to_string(path) {
