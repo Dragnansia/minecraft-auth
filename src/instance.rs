@@ -65,6 +65,9 @@ pub struct Instance {
 
     /// Current language
     pub current_language: String,
+
+    /// Tweak class
+    pub tweak_class: String,
 }
 
 impl Instance {
@@ -98,6 +101,7 @@ impl Instance {
                         window_width: 1280,
                         window_height: 720,
                         current_language: "en".to_string(),
+                        tweak_class: String::new(),
                     };
                     new_instance.update_config();
 
@@ -141,6 +145,8 @@ impl Instance {
             self.assets_dir.clone(),
             "--assetIndex".to_string(),
             self.asset_index.clone(),
+            "--tweakClass",
+            self.tweak_class.clone(),
         ]
     }
 
@@ -170,6 +176,7 @@ impl Instance {
         s += &format!("window_width={}\n", self.window_width);
         s += &format!("window_height={}\n", self.window_height);
         s += &format!("current_language={}\n", self.current_language);
+        s += &format!("tweak_class={}\n", self.tweak_class);
         s
     }
 
@@ -202,6 +209,7 @@ impl Instance {
                     window_width: h["window_width"].parse::<i32>().unwrap(),
                     window_height: h["window_height"].parse::<i32>().unwrap(),
                     current_language: h["current_language"].clone(),
+                    tweak_class: h["tweak_class"].clone(),
                 })
             }
             Err(_) => Err(InstanceCreateError::ReadConfigError),
