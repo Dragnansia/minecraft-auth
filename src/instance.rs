@@ -14,7 +14,6 @@ use std::{
     path::Path,
     process::{Child, Command},
 };
-use subprocess::{Communicator, Exec, PopenError};
 use zip::ZipArchive;
 
 #[derive(Debug)]
@@ -248,13 +247,13 @@ pub fn get_all_libs_of_version(app: &MinecraftAuth, version: &str) -> String {
         for lib in manifest["libraries"].as_array().unwrap() {
             if let Some(artifact) = get_artifact(lib) {
                 libs += &format!(
-                    "\"{}/libraries/{}\":",
+                    "{}/libraries/{}:",
                     app.path,
                     artifact["path"].as_str().unwrap()
                 );
             } else if let Some(classifiers) = get_classifiers(lib) {
                 libs += &format!(
-                    "\"{}/libraries/{}\":",
+                    "{}/libraries/{}:",
                     app.path,
                     classifiers["path"].as_str().unwrap()
                 );
@@ -262,7 +261,7 @@ pub fn get_all_libs_of_version(app: &MinecraftAuth, version: &str) -> String {
         }
     }
 
-    libs += &format!("\"{}/clients/{}/client.jar\"", app.path, version);
+    libs += &format!("{}/clients/{}/client.jar", app.path, version);
     libs
 }
 
@@ -297,22 +296,15 @@ pub fn get_all_libs_of_version(app: &MinecraftAuth, version: &str) -> String {
     libs
 }
 
-/// Not a secure approch of this
-pub fn si(app: &MinecraftAuth, user: &User, i: &Instance) -> Result<Communicator, PopenError> {
-    let mut cmd = String::from("java ");
-
-    i.args(app, user)
-        .iter()
-        .for_each(|el| cmd += &format!("{} ", el));
-
-    Exec::shell(cmd).communicate()
-}
-
-/// Try to used this
-/// Find better java version for version
+// Find better java version for version
+/// Start minecraft instance and return a child process
 pub fn start_instance(app: &MinecraftAuth, user: &User, i: &Instance) -> io::Result<Child> {
     let mut cmd = Command::new("java");
-    let spawn = cmd.args(i.args(app, user));
+    i.args(app, user).iter().for_each(|el| {
+        cmd.arg(el);
+    });
 
-    spawn.spawn()
+    println!("{:?}", cmd);
+
+    cmd.spawn()
 }
