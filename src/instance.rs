@@ -145,7 +145,7 @@ impl Instance {
             self.assets_dir.clone(),
             "--assetIndex".to_string(),
             self.asset_index.clone(),
-            "--tweakClass",
+            "--tweakClass".to_string(),
             self.tweak_class.clone(),
         ]
     }
