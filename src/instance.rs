@@ -304,7 +304,5 @@ pub fn start_instance(app: &MinecraftAuth, user: &User, i: &Instance) -> io::Res
         cmd.arg(el);
     });
 
-    println!("{:?}", cmd);
-
     cmd.spawn()
 }
