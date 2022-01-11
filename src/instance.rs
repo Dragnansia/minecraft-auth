@@ -117,6 +117,12 @@ impl Instance {
         }
     }
 
+    pub fn update_param<T>(&mut self, name: &str, val: Param) {
+        if let Some(v) = self.param.get_mut(name) {
+            *v = val;
+        }
+    }
+
     /// Return vec with all arguments for start instance
     pub fn args(&self, app: &MinecraftAuth, user: &User) -> Vec<String> {
         vec![
