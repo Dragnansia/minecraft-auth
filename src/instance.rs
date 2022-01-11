@@ -9,6 +9,7 @@ use crate::{
 use serde_json::Value;
 use std::{
     collections::HashMap,
+    fmt::Display,
     fs::{create_dir_all, File},
     io::{self, BufRead, BufReader, Write},
     path::Path,
@@ -20,54 +21,33 @@ use zip::ZipArchive;
 pub enum InstanceCreateError {
     AlreadyExist,
     FolderCreateError,
-    ReadConfigError,
+    ReadConfigError(String),
     NoFoundManifestVersion,
     NeedDownload(Vec<FileInfo>),
 }
 
+#[derive(Debug, Clone)]
+pub enum Param {
+    Int(i32),
+    Str(String),
+    None,
+}
+
+impl Display for Param {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let val = match self {
+            Param::Int(i) => i.to_string(),
+            Param::Str(s) => s.clone(),
+            Param::None => "".into(),
+        };
+
+        write!(f, "{}", val)
+    }
+}
+
 #[derive(Debug, Default, Clone)]
 pub struct Instance {
-    /// This is the name of the folder content
-    /// minecraft file of this instance
-    pub name: String,
-    pub path: String,
-
-    /// The game dir is a formatted path to the current
-    /// minecraft instance
-    pub game_dir: String,
-
-    /// Natives dir for temp file
-    pub native_dir: String,
-
-    /// Main class name
-    pub class_name: String,
-
-    /// Minecraft assets directory
-    pub assets_dir: String,
-    /// Minecraft asset index
-    pub asset_index: String,
-
-    /// Minecraft version
-    pub version: String,
-    /// (ex: forge - release)
-    pub version_type: String,
-
-    /// Libraries path folder
-    pub libs: String,
-
-    /// Ram
-    pub ram_min: i32,
-    pub ram_max: i32,
-
-    /// Window size
-    pub window_width: i32,
-    pub window_height: i32,
-
-    /// Current language
-    pub current_language: String,
-
-    /// Tweak class
-    pub tweak_class: String,
+    param: HashMap<String, Param>,
 }
 
 impl Instance {
@@ -84,25 +64,39 @@ impl Instance {
             if let Ok(_) = create_dir_all(&path) {
                 if let Some(manifest) = manifest(app, version) {
                     install_natives_file(app, &path, &manifest);
+                    let mut param = HashMap::new();
 
-                    let new_instance = Self {
-                        name: name.to_string(),
-                        path: path.clone(),
-                        game_dir: format!("{}/.minecraft", path),
-                        native_dir: format!("{}/natives", path),
-                        class_name: manifest["mainClass"].as_str().unwrap().to_string(),
-                        assets_dir: format!("{}/assets", app.path),
-                        asset_index: manifest["assets"].as_str().unwrap().to_string(),
-                        version: version.to_string(),
-                        version_type: manifest["type"].as_str().unwrap().to_string(),
-                        libs: get_all_libs_of_version(app, version.clone()),
-                        ram_min: 512,
-                        ram_max: 1024,
-                        window_width: 1280,
-                        window_height: 720,
-                        current_language: "en".to_string(),
-                        tweak_class: String::new(),
-                    };
+                    param.insert("name".into(), Param::Str(name.to_string()));
+                    param.insert("path".into(), Param::Str(path.clone()));
+                    param.insert("gameDir".into(), Param::Str(format!("{}/.minecraft", path)));
+                    param.insert("nativeDir".into(), Param::Str(format!("{}/natives", path)));
+                    param.insert(
+                        "assetsDir".into(),
+                        Param::Str(format!("{}/assets", app.path)),
+                    );
+                    param.insert(
+                        "assetIndex".into(),
+                        Param::Str(manifest["assets"].as_str().unwrap().to_string()),
+                    );
+                    param.insert(
+                        "mainClass".into(),
+                        Param::Str(manifest["mainClass"].as_str().unwrap().to_string()),
+                    );
+                    param.insert("version".into(), Param::Str(version.to_string()));
+                    param.insert(
+                        "versionType".into(),
+                        Param::Str(manifest["type"].as_str().unwrap().to_string()),
+                    );
+                    param.insert(
+                        "libs".into(),
+                        Param::Str(get_all_libs_of_version(app, version.clone())),
+                    );
+                    param.insert("ramMin".into(), Param::Int(512));
+                    param.insert("ramMax".into(), Param::Int(1024));
+                    param.insert("windowWidth".into(), Param::Int(800));
+                    param.insert("windowHeight".into(), Param::Int(600));
+
+                    let new_instance = Self { param };
                     new_instance.update_config();
 
                     Ok(new_instance)
@@ -115,22 +109,30 @@ impl Instance {
         }
     }
 
+    pub fn param(&self, name: &str) -> Param {
+        if let Some(val) = self.param.get(name) {
+            val.clone()
+        } else {
+            Param::None
+        }
+    }
+
     /// Return vec with all arguments for start instance
     pub fn args(&self, app: &MinecraftAuth, user: &User) -> Vec<String> {
         vec![
-            format!("-Xms{}m", self.ram_min),
-            format!("-Xmx{}m", self.ram_max),
-            format!("-Djava.library.path={}", self.native_dir),
-            format!("-Dorg.lwjgl.librarypath={}", self.native_dir),
+            format!("-Xms{}m", self.param("ramMin")),
+            format!("-Xmx{}m", self.param("ramMax")),
+            format!("-Djava.library.path={}", self.param("nativeDir")),
+            format!("-Dorg.lwjgl.librarypath={}", self.param("nativeDir")),
             format!("-Dminecraft.launcher.brand={}", app.name),
             "-Dminecraft.launcher.version=2.1".to_string(),
             "-cp".to_string(),
-            self.libs.clone(),
-            self.class_name.clone(),
+            self.param("libs").to_string(),
+            self.param("mainClass").to_string(),
             "--width".to_string(),
-            self.window_width.to_string(),
+            self.param("windowWidth").to_string(),
             "--height".to_string(),
-            self.window_height.to_string(),
+            self.param("windowHeight").to_string(),
             "--username".to_string(),
             user.username.clone(),
             "--accessToken".to_string(),
@@ -138,20 +140,18 @@ impl Instance {
             "--uuid".to_string(),
             user.uuid.clone(),
             "--version".to_string(),
-            self.version.clone(),
+            self.param("version").to_string(),
             "--gameDir".to_string(),
-            self.game_dir.clone(),
+            self.param("gameDir").to_string(),
             "--assetsDir".to_string(),
-            self.assets_dir.clone(),
+            self.param("assetsDir").to_string(),
             "--assetIndex".to_string(),
-            self.asset_index.clone(),
-            "--tweakClass".to_string(),
-            self.tweak_class.clone(),
+            self.param("assetIndex").to_string(),
         ]
     }
 
     pub fn update_config(&self) {
-        let p = format!("{}/config.cfg", self.path);
+        let p = format!("{}/config.cfg", self.param("path"));
         match File::create(p) {
             Ok(mut file) => {
                 let _ = file.write_all(self.config_to_string().as_bytes());
@@ -161,22 +161,11 @@ impl Instance {
     }
 
     fn config_to_string(&self) -> String {
-        let mut s = format!("name={}\n", self.name);
-        s += &format!("path={}\n", self.path);
-        s += &format!("game_dir={}\n", self.game_dir);
-        s += &format!("native_dir={}\n", self.native_dir);
-        s += &format!("class_name={}\n", self.class_name);
-        s += &format!("assets_dir={}\n", self.assets_dir);
-        s += &format!("asset_index={}\n", self.asset_index);
-        s += &format!("version={}\n", self.version);
-        s += &format!("version_type={}\n", self.version_type);
-        s += &format!("libs={}\n", self.libs);
-        s += &format!("ram_min={}\n", self.ram_min);
-        s += &format!("ram_max={}\n", self.ram_max);
-        s += &format!("window_width={}\n", self.window_width);
-        s += &format!("window_height={}\n", self.window_height);
-        s += &format!("current_language={}\n", self.current_language);
-        s += &format!("tweak_class={}\n", self.tweak_class);
+        let mut s = String::new();
+        self.param
+            .iter()
+            .for_each(|o| s += &format!("{}={}\n", o.0, o.1));
+
         s
     }
 
@@ -186,33 +175,16 @@ impl Instance {
         match File::open(&p) {
             Ok(file) => {
                 let buffer = BufReader::new(file);
-                let mut h = HashMap::new();
+                let mut param = HashMap::new();
                 buffer.lines().for_each(|line| {
                     let l = line.unwrap();
                     let (name, val) = scan!(l, '=', String, String);
-                    h.insert(name.unwrap(), val.unwrap());
+                    param.insert(name.unwrap(), Param::Str(val.unwrap()));
                 });
 
-                Ok(Self {
-                    name: h["name"].clone(),
-                    path: h["path"].clone(),
-                    game_dir: h["game_dir"].clone(),
-                    native_dir: h["native_dir"].clone(),
-                    class_name: h["class_name"].clone(),
-                    assets_dir: h["assets_dir"].clone(),
-                    asset_index: h["asset_index"].clone(),
-                    version: h["version"].clone(),
-                    version_type: h["version_type"].clone(),
-                    libs: h["libs"].clone(),
-                    ram_min: h["ram_min"].parse::<i32>().unwrap(),
-                    ram_max: h["ram_max"].parse::<i32>().unwrap(),
-                    window_width: h["window_width"].parse::<i32>().unwrap(),
-                    window_height: h["window_height"].parse::<i32>().unwrap(),
-                    current_language: h["current_language"].clone(),
-                    tweak_class: h["tweak_class"].clone(),
-                })
+                Ok(Self { param })
             }
-            Err(_) => Err(InstanceCreateError::ReadConfigError),
+            Err(err) => Err(InstanceCreateError::ReadConfigError(err.to_string())),
         }
     }
 }
@@ -247,60 +219,25 @@ fn install_natives_file(app: &MinecraftAuth, instance_path: &str, manifest: &Val
     }
 }
 
-#[cfg(target_os = "linux")]
 pub fn get_all_libs_of_version(app: &MinecraftAuth, version: &str) -> String {
     let mut libs = String::new();
+    let s = if cfg!(windows) { ';' } else { ':' };
 
     if let Some(manifest) = manifest(app, version) {
         for lib in manifest["libraries"].as_array().unwrap() {
-            if let Some(artifact) = get_artifact(lib) {
-                libs += &format!(
-                    "{}/libraries/{}:",
-                    app.path,
-                    artifact["path"].as_str().unwrap()
-                );
+            let l = if let Some(artifact) = get_artifact(lib) {
+                artifact["path"].as_str().unwrap()
             } else if let Some(classifiers) = get_classifiers(lib) {
-                libs += &format!(
-                    "{}/libraries/{}:",
-                    app.path,
-                    classifiers["path"].as_str().unwrap()
-                );
-            }
+                classifiers["path"].as_str().unwrap()
+            } else {
+                ""
+            };
+
+            libs += &format!("{}/libraries/{}{}", app.path, l, s);
         }
     }
 
     libs += &format!("{}/clients/{}/client.jar", app.path, version);
-    libs
-}
-
-#[cfg(target_os = "macos")]
-pub fn get_all_libs_of_version(app: &MinecraftAuth, version: &str) -> String {
-    // find macos way
-}
-
-#[cfg(target_os = "windows")]
-pub fn get_all_libs_of_version(app: &MinecraftAuth, version: &str) -> String {
-    let mut libs = String::from("\"");
-
-    if let Some(manifest) = version_manifest(app, version) {
-        for lib in manifest["libraries"].as_array().unwrap() {
-            if let Some(artifact) = get_artifact(lib) {
-                libs += &format!(
-                    "{}/libraries/{};",
-                    app.path,
-                    artifact["path"].as_str().unwrap()
-                );
-            } else if let Some(classifiers) = get_classifiers(lib) {
-                libs += &format!(
-                    "{}/libraries/{};",
-                    app.path,
-                    classifiers["path"].as_str().unwrap()
-                );
-            }
-        }
-    }
-
-    libs += &format!("{}/clients/{}/client.jar;\"", app.path, version);
     libs
 }
 
