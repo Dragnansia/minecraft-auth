@@ -117,10 +117,14 @@ impl Instance {
         }
     }
 
-    pub fn update_param<T>(&mut self, name: &str, val: Param) {
+    pub fn update_param(&mut self, name: &str, val: Param) {
         if let Some(v) = self.param.get_mut(name) {
             *v = val;
         }
+    }
+
+    pub fn add_param(&mut self, name: &str, val: Param) -> Option<Param> {
+        self.param.insert(name.to_string(), val)
     }
 
     /// Return vec with all arguments for start instance
