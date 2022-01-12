@@ -269,7 +269,7 @@ pub fn start_forge_instance(app: &MinecraftAuth, user: &User, i: &Instance) -> i
         cmd.arg(el);
     });
     cmd.arg("--tweakClass");
-    cmd.arg(i.param("tweakClass"));
+    cmd.arg(i.param("tweakClass").to_string());
 
     cmd.spawn()
 }
