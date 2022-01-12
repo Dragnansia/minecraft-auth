@@ -13,7 +13,7 @@ zip = "0.5.13"
 [dependencies.reqwest]
 version = "0.11.5"
 default-features = false
-features = ["stream"]
+features = ["rustls-tls", "stream"]
 
 [dependencies.tokio]
 version = "1.14.0"

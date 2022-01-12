@@ -57,7 +57,7 @@ impl Instance {
         name: &str,
         version: &str,
     ) -> Result<Self, InstanceCreateError> {
-        let path = format!("{}/instances/{}", app.path, &name);
+        let path = format!("{}/instances/{}/config.cfg", app.path, &name);
         if Path::new(&path).exists() {
             Instance::from_config(app, name)
         } else {

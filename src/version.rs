@@ -13,7 +13,11 @@ fn intern_manifest(p: &str) -> Option<Value> {
     let path = Path::new(p);
     if path.exists() && path.is_file() {
         if let Ok(file_content) = read_to_string(path) {
-            Some(serde_json::from_str(&file_content).unwrap())
+            if let Ok(root) = serde_json::from_str(&file_content) {
+                Some(root)
+            } else {
+                None
+            }
         } else {
             None
         }
