@@ -262,3 +262,14 @@ pub fn start_instance(app: &MinecraftAuth, user: &User, i: &Instance) -> io::Res
 
     cmd.spawn()
 }
+
+pub fn start_forge_instance(app: &MinecraftAuth, user: &User, i: &Instance) -> io::Result<Child> {
+    let mut cmd = Command::new("java");
+    i.args(app, user).iter().for_each(|el| {
+        cmd.arg(el);
+    });
+    cmd.arg("--tweakClass");
+    cmd.arg(i.param("tweakClass"));
+
+    cmd.spawn()
+}
