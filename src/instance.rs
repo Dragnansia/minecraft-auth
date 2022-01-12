@@ -17,6 +17,10 @@ use std::{
 };
 use zip::ZipArchive;
 
+#[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
+
+
 #[derive(Debug)]
 pub enum InstanceCreateError {
     AlreadyExist,
@@ -254,12 +258,24 @@ pub fn get_all_libs_of_version(app: &MinecraftAuth, version: &str) -> String {
 
 // Find better java version for version
 /// Start minecraft instance and return a child process
+#[cfg(not(target_os = "windows"))]
 pub fn start_instance(app: &MinecraftAuth, user: &User, i: &Instance) -> io::Result<Child> {
     let mut cmd = Command::new("java");
     i.args(app, user).iter().for_each(|el| {
         cmd.arg(el);
     });
 
+    cmd.spawn()
+}
+
+#[cfg(target_os = "windows")]
+pub fn start_instance(app: &MinecraftAuth, user: &User, i: &Instance) -> io::Result<Child> {
+    let mut cmd = Command::new("java");
+    i.args(app, user).iter().for_each(|el| {
+        cmd.arg(el);
+    });
+
+    cmd.creation_flags(0x00000008);
     cmd.spawn()
 }
 
