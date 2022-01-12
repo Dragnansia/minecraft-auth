@@ -57,8 +57,9 @@ impl Instance {
         name: &str,
         version: &str,
     ) -> Result<Self, InstanceCreateError> {
-        let path = format!("{}/instances/{}/config.cfg", app.path, &name);
-        if Path::new(&path).exists() {
+        let path = format!("{}/instances/{}", app.path, &name);
+        let config_file_path = format!("{}/config.cfg", path);
+        if Path::new(&config_file_path).exists() {
             Instance::from_config(app, name)
         } else {
             if let Ok(_) = create_dir_all(&path) {
