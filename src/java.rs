@@ -24,7 +24,6 @@ const JAVA_FOLDER_NAME_A8: &str = "jdk-";
 
 /// Try to find java version and return path
 /// if version found
-#[cfg(target_os = "linux")]
 pub fn find_java_version(version: u8) -> Option<String> {
     let (folder_java_begin, end_path) = if version <= 8 {
         (JAVA_FOLDER_NAME_B8, JAVA_PATH_END_B8)
