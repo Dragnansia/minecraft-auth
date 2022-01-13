@@ -297,8 +297,8 @@ pub fn start_forge_instance(
     user: &User,
     i: &Instance,
 ) -> Result<Child, String> {
-    if let Param::Int(version) = i.param("javaVersion") {
-        if let Some(java) = find_java_version(version as u8) {
+    if let Param::Str(version) = i.param("javaVersion") {
+        if let Some(java) = find_java_version(version.parse::<u8>().unwrap()) {
             let mut cmd = Command::new(java);
             i.args(app, user).iter().for_each(|el| {
                 cmd.arg(el);
