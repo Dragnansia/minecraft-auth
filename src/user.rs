@@ -121,6 +121,33 @@ impl User {
         }
     }
 
+    pub fn from_config_last_add(app: &MinecraftAuth) -> Option<Self> {
+        let p = format!("{}/users_accounts.json", app.path);
+        let path = Path::new(&p);
+        if path.exists() && path.is_file() {
+            if let Ok(file_content) = read_to_string(path) {
+                let root: Value = serde_json::from_str(&file_content).unwrap();
+                if let Some(user) = root["users"].as_object() {
+                    match user.iter().last() {
+                        Some(user) => Some(Self {
+                            username: user.0.clone(),
+                            uuid: user.1["uuid"].as_str().unwrap().to_string(),
+                            client_token: user.1["client_token"].as_str().unwrap().to_string(),
+                            access_token: user.1["access_token"].as_str().unwrap().to_string(),
+                        }),
+                        None => None,
+                    }
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    }
+
     pub fn save_on_file(&self, app: &MinecraftAuth) {
         if let Ok(mut file) = File::options()
             .read(true)
