@@ -20,7 +20,6 @@ use zip::ZipArchive;
 #[cfg(target_os = "windows")]
 use std::os::windows::process::CommandExt;
 
-
 #[derive(Debug)]
 pub enum InstanceCreateError {
     AlreadyExist,
@@ -271,6 +270,11 @@ pub fn start_instance(app: &MinecraftAuth, user: &User, i: &Instance) -> io::Res
 #[cfg(target_os = "windows")]
 pub fn start_instance(app: &MinecraftAuth, user: &User, i: &Instance) -> io::Result<Child> {
     let mut cmd = Command::new("java");
+
+    cmd.arg(
+        "-XX:HeapDumpPath=MojangTricksIntelDriversForPerformance_javaw.exe_minecraft.exe.heapdump",
+    );
+
     i.args(app, user).iter().for_each(|el| {
         cmd.arg(el);
     });
@@ -279,6 +283,7 @@ pub fn start_instance(app: &MinecraftAuth, user: &User, i: &Instance) -> io::Res
     cmd.spawn()
 }
 
+#[cfg(not(target_os = "windows"))]
 pub fn start_forge_instance(app: &MinecraftAuth, user: &User, i: &Instance) -> io::Result<Child> {
     let mut cmd = Command::new("java");
     i.args(app, user).iter().for_each(|el| {
@@ -287,5 +292,23 @@ pub fn start_forge_instance(app: &MinecraftAuth, user: &User, i: &Instance) -> i
     cmd.arg("--tweakClass");
     cmd.arg(i.param("tweakClass").to_string());
 
+    cmd.spawn()
+}
+
+#[cfg(target_os = "windows")]
+pub fn start_forge_instance(app: &MinecraftAuth, user: &User, i: &Instance) -> io::Result<Child> {
+    let mut cmd = Command::new("java");
+
+    cmd.arg(
+        "-XX:HeapDumpPath=MojangTricksIntelDriversForPerformance_javaw.exe_minecraft.exe.heapdump",
+    );
+
+    i.args(app, user).iter().for_each(|el| {
+        cmd.arg(el);
+    });
+    cmd.arg("--tweakClass");
+    cmd.arg(i.param("tweakClass").to_string());
+
+    cmd.creation_flags(0x00000008);
     cmd.spawn()
 }
