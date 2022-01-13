@@ -1,5 +1,6 @@
 pub mod downloader;
 pub mod instance;
+pub mod java;
 pub mod native;
 pub mod user;
 pub mod utils;

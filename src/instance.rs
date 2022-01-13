@@ -1,5 +1,6 @@
 use crate::{
     downloader::FileInfo,
+    java::find_java_version,
     native::os_native_name,
     user::User,
     utils::scan,
@@ -11,7 +12,7 @@ use std::{
     collections::HashMap,
     fmt::Display,
     fs::{create_dir_all, File},
-    io::{self, BufRead, BufReader, Write},
+    io::{BufRead, BufReader, Write},
     path::Path,
     process::{Child, Command},
 };
@@ -99,6 +100,12 @@ impl Instance {
                     param.insert("ramMax".into(), Param::Int(1024));
                     param.insert("windowWidth".into(), Param::Int(800));
                     param.insert("windowHeight".into(), Param::Int(600));
+                    param.insert(
+                        "javaVersion".into(),
+                        Param::Int(
+                            manifest["javaVersion"]["majorVersion"].as_i64().unwrap() as i32,
+                        ),
+                    );
 
                     let new_instance = Self { param };
                     new_instance.update_config();
@@ -258,57 +265,107 @@ pub fn get_all_libs_of_version(app: &MinecraftAuth, version: &str) -> String {
 // Find better java version for version
 /// Start minecraft instance and return a child process
 #[cfg(not(target_os = "windows"))]
-pub fn start_instance(app: &MinecraftAuth, user: &User, i: &Instance) -> io::Result<Child> {
-    let mut cmd = Command::new("java");
-    i.args(app, user).iter().for_each(|el| {
-        cmd.arg(el);
-    });
+pub fn start_instance(app: &MinecraftAuth, user: &User, i: &Instance) -> Result<Child, String> {
+    if let Param::Str(version) = i.param("javaVersion") {
+        if let Some(java) = find_java_version(version.parse::<u8>().unwrap()) {
+            let mut cmd = Command::new(java);
+            i.args(app, user).iter().for_each(|el| {
+                cmd.arg(el);
+            });
 
-    cmd.spawn()
+            match cmd.spawn() {
+                Ok(process) => Ok(process),
+                Err(err) => Err(err.to_string()),
+            }
+        } else {
+            Err(format!("No found java version {}", version))
+        }
+    } else {
+        Err("No found javaVersion param on Instance".to_string())
+    }
 }
 
 #[cfg(target_os = "windows")]
-pub fn start_instance(app: &MinecraftAuth, user: &User, i: &Instance) -> io::Result<Child> {
-    let mut cmd = Command::new("java");
+pub fn start_instance(app: &MinecraftAuth, user: &User, i: &Instance) -> Result<Child, String> {
+    if let Param::Int(version) = i.param("javaVersion") {
+        if let Some(java) = find_java_version(version as u8) {
+            let mut cmd = Command::new(java);
+            cmd.arg(
+                "-XX:HeapDumpPath=MojangTricksIntelDriversForPerformance_javaw.exe_minecraft.exe.heapdump",
+            );
 
-    cmd.arg(
-        "-XX:HeapDumpPath=MojangTricksIntelDriversForPerformance_javaw.exe_minecraft.exe.heapdump",
-    );
+            i.args(app, user).iter().for_each(|el| {
+                cmd.arg(el);
+            });
 
-    i.args(app, user).iter().for_each(|el| {
-        cmd.arg(el);
-    });
-
-    cmd.creation_flags(0x00000008);
-    cmd.spawn()
+            match cmd.spawn() {
+                Ok(process) => Ok(process),
+                Err(err) => Err(err.to_string()),
+            }
+        } else {
+            Err(format!("No found java version {}", version))
+        }
+    } else {
+        Err("No found java javaVersion param on Instance".to_string())
+    }
 }
 
 #[cfg(not(target_os = "windows"))]
-pub fn start_forge_instance(app: &MinecraftAuth, user: &User, i: &Instance) -> io::Result<Child> {
-    let mut cmd = Command::new("java");
-    i.args(app, user).iter().for_each(|el| {
-        cmd.arg(el);
-    });
-    cmd.arg("--tweakClass");
-    cmd.arg(i.param("tweakClass").to_string());
+pub fn start_forge_instance(
+    app: &MinecraftAuth,
+    user: &User,
+    i: &Instance,
+) -> Result<Child, String> {
+    if let Param::Int(version) = i.param("javaVersion") {
+        if let Some(java) = find_java_version(version as u8) {
+            let mut cmd = Command::new(java);
+            i.args(app, user).iter().for_each(|el| {
+                cmd.arg(el);
+            });
 
-    cmd.spawn()
+            cmd.arg("--tweakClass");
+            cmd.arg(i.param("tweakClass").to_string());
+
+            match cmd.spawn() {
+                Ok(process) => Ok(process),
+                Err(err) => Err(err.to_string()),
+            }
+        } else {
+            Err(format!("No found java version {}", version))
+        }
+    } else {
+        Err("No found javaVersion param on Instance".to_string())
+    }
 }
 
 #[cfg(target_os = "windows")]
-pub fn start_forge_instance(app: &MinecraftAuth, user: &User, i: &Instance) -> io::Result<Child> {
-    let mut cmd = Command::new("java");
+pub fn start_forge_instance(
+    app: &MinecraftAuth,
+    user: &User,
+    i: &Instance,
+) -> Result<Child, String> {
+    if let Param::Int(version) = i.param("javaVersion") {
+        if let Some(java) = find_java_version(version as u8) {
+            let mut cmd = Command::new(java);
+            cmd.arg(
+                "-XX:HeapDumpPath=MojangTricksIntelDriversForPerformance_javaw.exe_minecraft.exe.heapdump",
+            );
 
-    cmd.arg(
-        "-XX:HeapDumpPath=MojangTricksIntelDriversForPerformance_javaw.exe_minecraft.exe.heapdump",
-    );
+            i.args(app, user).iter().for_each(|el| {
+                cmd.arg(el);
+            });
 
-    i.args(app, user).iter().for_each(|el| {
-        cmd.arg(el);
-    });
-    cmd.arg("--tweakClass");
-    cmd.arg(i.param("tweakClass").to_string());
+            cmd.arg("--tweakClass");
+            cmd.arg(i.param("tweakClass").to_string());
 
-    cmd.creation_flags(0x00000008);
-    cmd.spawn()
+            match cmd.spawn() {
+                Ok(process) => Ok(process),
+                Err(err) => Err(err.to_string()),
+            }
+        } else {
+            Err(format!("No found java version {}", version))
+        }
+    } else {
+        Err("No found java javaVersion param on Instance".to_string())
+    }
 }
