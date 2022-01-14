@@ -83,8 +83,8 @@ pub struct Config {
     pub ram_max: i32,
     pub ram_min: i32,
 
-    pub window_height: i32,
     pub window_width: i32,
+    pub window_height: i32,
 }
 
 impl Default for Config {
@@ -99,12 +99,12 @@ impl Default for Config {
 }
 
 impl Config {
-    pub fn new(ram_min: i32, ram_max: i32, window_height: i32, window_width: i32) -> Self {
+    pub fn new(ram_min: i32, ram_max: i32, window_width: i32, window_height: i32) -> Self {
         Self {
             ram_max,
             ram_min,
-            window_height,
             window_width,
+            window_height,
         }
     }
 }
