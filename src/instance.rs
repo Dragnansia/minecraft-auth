@@ -453,7 +453,14 @@ pub fn get_all_libs_of_version(app: &MinecraftAuth, version: &str) -> String {
 pub fn start_instance(app: &MinecraftAuth, user: &User, i: &Instance) -> Result<Child, String> {
     if let DataParam::Int(version) = i.param("javaVersion") {
         if let Some(java) = find_java_version(version as u8) {
-            match Command::new(java).args(i.args(app, user)).spawn() {
+            let mut cmd = Command::new(java);
+            cmd.args(i.args(app, user));
+
+            #[cfg(windows)]
+            // No open console windows when spawn command
+            cmd.creation_flags(0x08000000);
+
+            match cmd.spawn() {
                 Ok(process) => Ok(process),
                 Err(err) => Err(err.to_string()),
             }
