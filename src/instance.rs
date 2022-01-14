@@ -95,33 +95,31 @@ impl Instance {
         let config_file_path = format!("{}/config.cfg", path);
         if Path::new(&config_file_path).exists() {
             Instance::from_config(app, name)
-        } else {
-            if create_dir_all(&path).is_ok() {
-                let mut param = HashMap::new();
+        } else if create_dir_all(&path).is_ok() {
+            let mut param = HashMap::new();
 
-                param.insert(
-                    "version".into(),
-                    Param::new(DataParam::Str(version.to_string()), true),
-                );
-                param.insert("ramMin".into(), Param::new(DataParam::Int(512), true));
-                param.insert("ramMax".into(), Param::new(DataParam::Int(1024), true));
-                param.insert("windowWidth".into(), Param::new(DataParam::Int(800), true));
-                param.insert("windowHeight".into(), Param::new(DataParam::Int(600), true));
+            param.insert(
+                "version".into(),
+                Param::new(DataParam::Str(version.to_string()), true),
+            );
+            param.insert("ramMin".into(), Param::new(DataParam::Int(512), true));
+            param.insert("ramMax".into(), Param::new(DataParam::Int(1024), true));
+            param.insert("windowWidth".into(), Param::new(DataParam::Int(800), true));
+            param.insert("windowHeight".into(), Param::new(DataParam::Int(600), true));
 
-                let mut this = Self {
-                    is_new: true,
-                    param,
-                };
+            let mut this = Self {
+                is_new: true,
+                param,
+            };
 
-                if let Some(manifest) = manifest(app, version) {
-                    this.end_init_instance(app, &manifest, name, version);
-                    Ok(this)
-                } else {
-                    Err(InstanceCreateError::NoFoundManifestVersion)
-                }
+            if let Some(manifest) = manifest(app, version) {
+                this.end_init_instance(app, &manifest, name, version);
+                Ok(this)
             } else {
-                Err(InstanceCreateError::FolderCreateError)
+                Err(InstanceCreateError::NoFoundManifestVersion)
             }
+        } else {
+            Err(InstanceCreateError::FolderCreateError)
         }
     }
 
@@ -408,7 +406,6 @@ pub fn get_all_libs_of_version(app: &MinecraftAuth, version: &str) -> String {
 
 // Find better java version for version
 /// Start minecraft instance and return a child process
-#[cfg(not(target_os = "windows"))]
 pub fn start_instance(app: &MinecraftAuth, user: &User, i: &Instance) -> Result<Child, String> {
     if let DataParam::Int(version) = i.param("javaVersion") {
         if let Some(java) = find_java_version(version as u8) {
