@@ -1,5 +1,6 @@
 use futures::StreamExt;
 use reqwest::Client;
+use serde::{Deserialize, Serialize};
 use std::{
     fs::{create_dir_all, File},
     io::Write,

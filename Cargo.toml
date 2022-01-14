@@ -18,3 +18,7 @@ features = ["rustls-tls", "stream"]
 [dependencies.tokio]
 version = "1.14.0"
 features = ["full"]
+
+[dependencies.serde]
+version = "1.0.133"
+features = ["derive"]
