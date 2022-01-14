@@ -7,7 +7,7 @@ use std::{
     path::Path,
 };
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FileInfo {
     pub url: String,
     pub path: String,
