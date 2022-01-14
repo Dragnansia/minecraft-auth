@@ -78,6 +78,37 @@ impl Display for Param {
     }
 }
 
+#[derive(Debug, Copy, Clone)]
+pub struct Config {
+    pub ram_max: i32,
+    pub ram_min: i32,
+
+    pub window_height: i32,
+    pub window_width: i32,
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            ram_max: 1024,
+            ram_min: 512,
+            window_height: 600,
+            window_width: 800,
+        }
+    }
+}
+
+impl Config {
+    pub fn new(ram_min: i32, ram_max: i32, window_height: i32, window_width: i32) -> Self {
+        Self {
+            ram_max,
+            ram_min,
+            window_height,
+            window_width,
+        }
+    }
+}
+
 #[derive(Debug, Default, Clone)]
 pub struct Instance {
     pub is_new: bool,
@@ -90,6 +121,7 @@ impl Instance {
         app: &MinecraftAuth,
         name: &str,
         version: &str,
+        config: Config,
     ) -> Result<Self, InstanceCreateError> {
         let path = format!("{}/instances/{}", app.path, &name);
         let config_file_path = format!("{}/config.cfg", path);
@@ -102,10 +134,22 @@ impl Instance {
                 "version".into(),
                 Param::new(DataParam::Str(version.to_string()), true),
             );
-            param.insert("ramMin".into(), Param::new(DataParam::Int(512), true));
-            param.insert("ramMax".into(), Param::new(DataParam::Int(1024), true));
-            param.insert("windowWidth".into(), Param::new(DataParam::Int(800), true));
-            param.insert("windowHeight".into(), Param::new(DataParam::Int(600), true));
+            param.insert(
+                "ramMin".into(),
+                Param::new(DataParam::Int(config.ram_min), true),
+            );
+            param.insert(
+                "ramMax".into(),
+                Param::new(DataParam::Int(config.ram_max), true),
+            );
+            param.insert(
+                "windowWidth".into(),
+                Param::new(DataParam::Int(config.window_width), true),
+            );
+            param.insert(
+                "windowHeight".into(),
+                Param::new(DataParam::Int(config.window_height), true),
+            );
 
             let mut this = Self {
                 is_new: true,
