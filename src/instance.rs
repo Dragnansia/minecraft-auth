@@ -10,7 +10,7 @@ use crate::{
 use serde_json::Value;
 use std::{
     collections::HashMap,
-    fmt::Display,
+    fmt::{self, Display, Formatter},
     fs::{create_dir_all, File},
     io::{BufRead, BufReader, Write},
     path::Path,
@@ -23,6 +23,7 @@ use std::os::windows::process::CommandExt;
 
 #[derive(Debug)]
 pub enum InstanceCreateError {
+    NoFoundVersion,
     AlreadyExist,
     FolderCreateError,
     ReadConfigError(String),
@@ -31,26 +32,55 @@ pub enum InstanceCreateError {
 }
 
 #[derive(Debug, Clone)]
-pub enum Param {
+pub enum DataParam {
     Int(i32),
     Str(String),
     None,
 }
 
-impl Display for Param {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl DataParam {
+    pub fn is_true(&self) -> bool {
+        match self {
+            DataParam::Int(i) => *i > 0,
+            DataParam::Str(s) => s == "true",
+            DataParam::None => false,
+        }
+    }
+}
+
+impl Display for DataParam {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let val = match self {
-            Param::Int(i) => i.to_string(),
-            Param::Str(s) => s.clone(),
-            Param::None => "".into(),
+            DataParam::Int(i) => i.to_string(),
+            DataParam::Str(s) => s.clone(),
+            DataParam::None => "".into(),
         };
 
         write!(f, "{}", val)
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct Param {
+    pub data: DataParam,
+    pub on_config: bool,
+}
+
+impl Param {
+    pub fn new(data: DataParam, on_config: bool) -> Self {
+        Self { data, on_config }
+    }
+}
+
+impl Display for Param {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.data)
+    }
+}
+
 #[derive(Debug, Default, Clone)]
 pub struct Instance {
+    pub is_new: bool,
     param: HashMap<String, Param>,
 }
 
@@ -66,51 +96,26 @@ impl Instance {
         if Path::new(&config_file_path).exists() {
             Instance::from_config(app, name)
         } else {
-            if let Ok(_) = create_dir_all(&path) {
+            if create_dir_all(&path).is_ok() {
+                let mut param = HashMap::new();
+
+                param.insert(
+                    "version".into(),
+                    Param::new(DataParam::Str(version.to_string()), true),
+                );
+                param.insert("ramMin".into(), Param::new(DataParam::Int(512), true));
+                param.insert("ramMax".into(), Param::new(DataParam::Int(1024), true));
+                param.insert("windowWidth".into(), Param::new(DataParam::Int(800), true));
+                param.insert("windowHeight".into(), Param::new(DataParam::Int(600), true));
+
+                let mut this = Self {
+                    is_new: true,
+                    param,
+                };
+
                 if let Some(manifest) = manifest(app, version) {
-                    install_natives_file(app, &path, &manifest);
-                    let mut param = HashMap::new();
-
-                    param.insert("name".into(), Param::Str(name.to_string()));
-                    param.insert("path".into(), Param::Str(path.clone()));
-                    param.insert("gameDir".into(), Param::Str(format!("{}/.minecraft", path)));
-                    param.insert("nativeDir".into(), Param::Str(format!("{}/natives", path)));
-                    param.insert(
-                        "assetsDir".into(),
-                        Param::Str(format!("{}/assets", app.path)),
-                    );
-                    param.insert(
-                        "assetIndex".into(),
-                        Param::Str(manifest["assets"].as_str().unwrap().to_string()),
-                    );
-                    param.insert(
-                        "mainClass".into(),
-                        Param::Str(manifest["mainClass"].as_str().unwrap().to_string()),
-                    );
-                    param.insert("version".into(), Param::Str(version.to_string()));
-                    param.insert(
-                        "versionType".into(),
-                        Param::Str(manifest["type"].as_str().unwrap().to_string()),
-                    );
-                    param.insert(
-                        "libs".into(),
-                        Param::Str(get_all_libs_of_version(app, version.clone())),
-                    );
-                    param.insert("ramMin".into(), Param::Int(512));
-                    param.insert("ramMax".into(), Param::Int(1024));
-                    param.insert("windowWidth".into(), Param::Int(800));
-                    param.insert("windowHeight".into(), Param::Int(600));
-                    param.insert(
-                        "javaVersion".into(),
-                        Param::Int(
-                            manifest["javaVersion"]["majorVersion"].as_i64().unwrap() as i32,
-                        ),
-                    );
-
-                    let new_instance = Self { param };
-                    new_instance.update_config();
-
-                    Ok(new_instance)
+                    this.end_init_instance(app, &manifest, name, version);
+                    Ok(this)
                 } else {
                     Err(InstanceCreateError::NoFoundManifestVersion)
                 }
@@ -120,31 +125,137 @@ impl Instance {
         }
     }
 
-    pub fn param(&self, name: &str) -> Param {
-        if let Some(val) = self.param.get(name) {
-            val.clone()
+    fn end_init_instance(
+        &mut self,
+        app: &MinecraftAuth,
+        manifest: &Value,
+        name: &str,
+        version: &str,
+    ) {
+        let path = format!("{}/instances/{}", app.path, name);
+
+        self.add_param("name", Param::new(DataParam::Str(name.to_string()), false));
+        self.add_param("path", Param::new(DataParam::Str(path.clone()), false));
+
+        self.add_param(
+            "libs",
+            Param::new(DataParam::Str(get_all_libs_of_version(app, version)), false),
+        );
+        self.add_param(
+            "assetsDir",
+            Param::new(DataParam::Str(format!("{}/assets", app.path)), false),
+        );
+        self.add_param(
+            "gameDir",
+            Param::new(DataParam::Str(format!("{}/.minecraft", path)), false),
+        );
+        self.add_param(
+            "nativeDir",
+            Param::new(DataParam::Str(format!("{}/natives", path)), false),
+        );
+        self.add_param(
+            "javaVersion",
+            Param::new(
+                DataParam::Int(manifest["javaVersion"]["majorVersion"].as_i64().unwrap() as i32),
+                false,
+            ),
+        );
+        self.add_param(
+            "assetIndex",
+            Param::new(
+                DataParam::Str(manifest["assets"].as_str().unwrap().to_string()),
+                false,
+            ),
+        );
+
+        if self.param("useForge").is_true() {
+            self.add_param(
+                "versionType",
+                Param::new(DataParam::Str("Forge".to_string()), false),
+            );
+            self.add_param(
+                "mainClass",
+                Param::new(
+                    DataParam::Str("net.minecraft.launchwrapper.Launch".to_string()),
+                    false,
+                ),
+            );
+            self.add_param(
+                "tweakClass",
+                Param::new(
+                    DataParam::Str("net.minecraftforge.fml.common.launcher.FMLTweaker".to_string()),
+                    false,
+                ),
+            );
         } else {
-            Param::None
+            self.add_param(
+                "versionType",
+                Param::new(
+                    DataParam::Str(manifest["type"].as_str().unwrap().to_string()),
+                    false,
+                ),
+            );
+            self.add_param(
+                "mainClass",
+                Param::new(
+                    DataParam::Str(manifest["mainClass"].as_str().unwrap().to_string()),
+                    false,
+                ),
+            );
+        }
+
+        if self.is_new {
+            install_natives_file(app, &path, &manifest);
+            self.save_config();
         }
     }
 
-    pub fn update_param(&mut self, name: &str, val: Param) {
-        if let Some(v) = self.param.get_mut(name) {
-            *v = val;
-        }
+    // Need to find a method to download forge file
+    pub fn install_forge(&mut self) {
+        self.add_param("useForge", Param::new(DataParam::Str("true".into()), false));
+        self.save_config();
+
+        self.update_param("versionType", DataParam::Str("Forge".to_string()));
+        self.update_param(
+            "mainClass",
+            DataParam::Str("net.minecraft.launchwrapper.Launch".to_string()),
+        );
+        self.update_param(
+            "tweakClass",
+            DataParam::Str("net.minecraftforge.fml.common.launcher.FMLTweaker".to_string()),
+        );
     }
 
     pub fn add_param(&mut self, name: &str, val: Param) -> Option<Param> {
         self.param.insert(name.to_string(), val)
     }
 
+    pub fn param(&self, name: &str) -> DataParam {
+        if let Some(val) = self.param.get(name) {
+            val.data.clone()
+        } else {
+            DataParam::None
+        }
+    }
+
+    pub fn update_param(&mut self, name: &str, val: DataParam) {
+        if let Some(v) = self.param.get_mut(name) {
+            v.data = val;
+        }
+    }
+
     /// Return vec with all arguments for start instance
     pub fn args(&self, app: &MinecraftAuth, user: &User) -> Vec<String> {
-        vec![
+        let mut v = vec![
+            #[cfg(target_os = "windows")]
+            "-XX:HeapDumpPath=MojangTricksIntelDriversForPerformance_javaw.exe_minecraft.exe.heapdump".into(),
             format!("-Xms{}m", self.param("ramMin")),
             format!("-Xmx{}m", self.param("ramMax")),
             format!("-Djava.library.path={}", self.param("nativeDir")),
-            format!("-Dorg.lwjgl.librarypath={}", self.param("nativeDir")),
+            format!(
+                "-Dorg.lwjgl.librarypath={}",
+                self.param("nativeDir")
+            ),
             format!("-Dminecraft.launcher.brand={}", app.name),
             "-Dminecraft.launcher.version=2.1".to_string(),
             "-cp".to_string(),
@@ -168,14 +279,23 @@ impl Instance {
             self.param("assetsDir").to_string(),
             "--assetIndex".to_string(),
             self.param("assetIndex").to_string(),
-        ]
+        ];
+
+        if self.param("useForge").is_true() {
+            v.append(&mut vec![
+                "--tweakClass".into(),
+                self.param("tweakClass").to_string(),
+            ]);
+        }
+
+        v
     }
 
-    pub fn update_config(&self) {
+    pub fn save_config(&self) {
         let p = format!("{}/config.cfg", self.param("path"));
         match File::create(p) {
             Ok(mut file) => {
-                let _ = file.write_all(self.config_to_string().as_bytes());
+                file.write_all(self.config_to_string().as_bytes()).unwrap();
             }
             Err(err) => println!("[Error] {:?}", err),
         };
@@ -183,9 +303,13 @@ impl Instance {
 
     fn config_to_string(&self) -> String {
         let mut s = String::new();
-        self.param
-            .iter()
-            .for_each(|o| s += &format!("{}={}\n", o.0, o.1));
+        self.param.iter().for_each(|o| {
+            s += &if o.1.on_config {
+                format!("{}={}\n", o.0, o.1)
+            } else {
+                "".into()
+            };
+        });
 
         s
     }
@@ -200,10 +324,27 @@ impl Instance {
                 buffer.lines().for_each(|line| {
                     let l = line.unwrap();
                     let (name, val) = scan!(l, '=', String, String);
-                    param.insert(name.unwrap(), Param::Str(val.unwrap()));
+                    param.insert(
+                        name.unwrap(),
+                        Param::new(DataParam::Str(val.unwrap()), true),
+                    );
                 });
 
-                Ok(Self { param })
+                let mut this = Self {
+                    is_new: false,
+                    param,
+                };
+
+                if let DataParam::Str(version) = this.param("version") {
+                    if let Some(manifest) = manifest(app, &version) {
+                        this.end_init_instance(app, &manifest, name, &version);
+                        Ok(this)
+                    } else {
+                        Err(InstanceCreateError::NoFoundManifestVersion)
+                    }
+                } else {
+                    Err(InstanceCreateError::NoFoundVersion)
+                }
             }
             Err(err) => Err(InstanceCreateError::ReadConfigError(err.to_string())),
         }
@@ -266,54 +407,9 @@ pub fn get_all_libs_of_version(app: &MinecraftAuth, version: &str) -> String {
 /// Start minecraft instance and return a child process
 #[cfg(not(target_os = "windows"))]
 pub fn start_instance(app: &MinecraftAuth, user: &User, i: &Instance) -> Result<Child, String> {
-    if let Param::Str(version) = i.param("javaVersion") {
-        if let Some(java) = find_java_version(version.parse::<u8>().unwrap()) {
-            let mut cmd = Command::new(java);
-
-            if cfg!(windows) {
-                cmd.arg(
-                    "-XX:HeapDumpPath=MojangTricksIntelDriversForPerformance_javaw.exe_minecraft.exe.heapdump",
-                );
-            }
-
-            i.args(app, user).iter().for_each(|el| {
-                cmd.arg(el);
-            });
-
-            match cmd.spawn() {
-                Ok(process) => Ok(process),
-                Err(err) => Err(err.to_string()),
-            }
-        } else {
-            Err(format!("No found java version {}", version))
-        }
-    } else {
-        Err("No found javaVersion param on Instance".to_string())
-    }
-}
-
-pub fn start_forge_instance(
-    app: &MinecraftAuth,
-    user: &User,
-    i: &Instance,
-) -> Result<Child, String> {
-    if let Param::Str(version) = i.param("javaVersion") {
-        if let Some(java) = find_java_version(version.parse::<u8>().unwrap()) {
-            let mut cmd = Command::new(java);
-            i.args(app, user).iter().for_each(|el| {
-                cmd.arg(el);
-            });
-
-            if cfg!(windows) {
-                cmd.arg(
-                    "-XX:HeapDumpPath=MojangTricksIntelDriversForPerformance_javaw.exe_minecraft.exe.heapdump",
-                );
-            }
-
-            cmd.arg("--tweakClass");
-            cmd.arg(i.param("tweakClass").to_string());
-
-            match cmd.spawn() {
+    if let DataParam::Int(version) = i.param("javaVersion") {
+        if let Some(java) = find_java_version(version as u8) {
+            match Command::new(java).args(i.args(app, user)).spawn() {
                 Ok(process) => Ok(process),
                 Err(err) => Err(err.to_string()),
             }
