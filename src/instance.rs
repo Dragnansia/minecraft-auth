@@ -220,9 +220,12 @@ impl Instance {
             "mainClass",
             DataParam::Str("net.minecraft.launchwrapper.Launch".to_string()),
         );
-        self.update_param(
+        self.add_param(
             "tweakClass",
-            DataParam::Str("net.minecraftforge.fml.common.launcher.FMLTweaker".to_string()),
+            Param::new(
+                DataParam::Str("net.minecraftforge.fml.common.launcher.FMLTweaker".to_string()),
+                false,
+            ),
         );
     }
 
