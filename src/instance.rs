@@ -212,7 +212,7 @@ impl Instance {
 
     // Need to find a method to download forge file
     pub fn install_forge(&mut self) {
-        self.add_param("useForge", Param::new(DataParam::Str("true".into()), false));
+        self.add_param("useForge", Param::new(DataParam::Str("true".into()), true));
         self.save_config();
 
         self.update_param("versionType", DataParam::Str("Forge".to_string()));
