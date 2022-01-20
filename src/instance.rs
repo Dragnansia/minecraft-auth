@@ -7,7 +7,10 @@ use crate::{
     version::{get_artifact, get_classifiers, manifest},
     MinecraftAuth,
 };
+use log::error;
 use serde_json::Value;
+#[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
 use std::{
     collections::HashMap,
     fmt::{self, Display, Formatter},
@@ -17,9 +20,6 @@ use std::{
     process::{Child, Command},
 };
 use zip::ZipArchive;
-
-#[cfg(target_os = "windows")]
-use std::os::windows::process::CommandExt;
 
 #[derive(Debug)]
 pub enum InstanceCreateError {
@@ -419,7 +419,7 @@ fn install_natives_file(app: &MinecraftAuth, instance_path: &str, manifest: &Val
                     let _ = zip.extract(native_dir.clone());
                 }
                 Err(err) => {
-                    println!("[Error] {}", err)
+                    error!("{}", err);
                 }
             }
         }

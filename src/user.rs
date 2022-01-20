@@ -3,6 +3,7 @@ use reqwest::Client;
 use serde_json::{Map, Value};
 use std::{
     fs::{read_to_string, File},
+    io,
     io::{Read, Write},
     path::Path,
 };
@@ -149,12 +150,7 @@ impl User {
     }
 
     pub fn save_on_file(&self, app: &MinecraftAuth) {
-        if let Ok(mut file) = File::options()
-            .read(true)
-            .write(true)
-            .create(true)
-            .open(format!("{}/users_accounts.json", app.path))
-        {
+        if let Ok(mut file) = User::open_user_file(app) {
             let mut content = String::new();
             file.read_to_string(&mut content).unwrap();
 
@@ -211,6 +207,42 @@ impl User {
         );
 
         user_info
+    }
+
+    pub fn disconnect(&self, app: &MinecraftAuth) -> Result<(), String> {
+        if let Ok(mut file) = User::open_user_file(app) {
+            let mut content = String::new();
+            file.read_to_string(&mut content).unwrap();
+
+            if content.is_empty() {
+                return Ok(());
+            }
+
+            let root: Value = serde_json::from_str(&content).unwrap();
+            let el = match root {
+                Value::Object(mut r) => {
+                    if r.contains_key(&self.username) {
+                        r.remove(&self.username).unwrap();
+                    }
+
+                    Value::Object(r)
+                }
+                v => v.clone(),
+            };
+
+            let new_content = serde_json::to_string(&el).unwrap();
+            file.write_all(new_content.as_bytes()).unwrap();
+        }
+
+        Ok(())
+    }
+
+    fn open_user_file(app: &MinecraftAuth) -> io::Result<File> {
+        File::options()
+            .read(true)
+            .write(true)
+            .create(true)
+            .open(format!("{}/users_accounts.json", app.path))
     }
 }
 
