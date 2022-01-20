@@ -128,16 +128,19 @@ impl User {
         let path = Path::new(&p);
         if path.exists() && path.is_file() {
             if let Ok(file_content) = read_to_string(path) {
-                let root: Value = serde_json::from_str(&file_content).unwrap();
-                if let Some(user) = root["users"].as_object() {
-                    match user.iter().last() {
-                        Some(user) => Some(Self {
-                            username: user.0.clone(),
-                            uuid: user.1["uuid"].as_str().unwrap().to_string(),
-                            client_token: user.1["client_token"].as_str().unwrap().to_string(),
-                            access_token: user.1["access_token"].as_str().unwrap().to_string(),
-                        }),
-                        None => None,
+                if let Ok(root) = serde_json::from_str::<Value>(&file_content) {
+                    if let Some(user) = root["users"].as_object() {
+                        match user.iter().last() {
+                            Some(user) => Some(Self {
+                                username: user.0.clone(),
+                                uuid: user.1["uuid"].as_str().unwrap().to_string(),
+                                client_token: user.1["client_token"].as_str().unwrap().to_string(),
+                                access_token: user.1["access_token"].as_str().unwrap().to_string(),
+                            }),
+                            None => None,
+                        }
+                    } else {
+                        None
                     }
                 } else {
                     None
@@ -217,7 +220,7 @@ impl User {
             let mut content = String::new();
             file.read_to_string(&mut content).unwrap();
 
-            if content.is_empty() {
+            if content.is_empty() || content == "\n" {
                 return Ok(());
             }
 
