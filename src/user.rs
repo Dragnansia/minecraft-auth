@@ -1,4 +1,5 @@
 use crate::MinecraftAuth;
+use log::{error, info, warn};
 use reqwest::Client;
 use serde_json::{Map, Value};
 use std::{
@@ -163,10 +164,12 @@ impl User {
                 Value::Object(mut r) => {
                     if r.get("users").is_some() {
                         if let Value::Object(users) = &mut r["users"] {
-                            if let Value::Object(user) = &mut users[&self.username] {
-                                user["uuid"] = Value::String(self.uuid.clone());
-                                user["access_token"] = Value::String(self.access_token.clone());
-                                user["client_token"] = Value::String(self.client_token.clone());
+                            if users.contains_key(&self.username) {
+                                if let Value::Object(user) = &mut users[&self.username] {
+                                    user["uuid"] = Value::String(self.uuid.clone());
+                                    user["access_token"] = Value::String(self.access_token.clone());
+                                    user["client_token"] = Value::String(self.client_token.clone());
+                                }
                             } else {
                                 let mut user = Map::new();
                                 user.insert(
@@ -221,8 +224,18 @@ impl User {
             let root: Value = serde_json::from_str(&content).unwrap();
             let el = match root {
                 Value::Object(mut r) => {
-                    if r.contains_key(&self.username) {
-                        r.remove(&self.username).unwrap();
+                    if r.contains_key("users") {
+                        if let Value::Object(arr) = &mut r["users"] {
+                            info!(
+                                "Remove {} from User file: {} (user is find on HashMap)",
+                                self.username,
+                                arr.remove(&self.username).is_some()
+                            );
+                        } else {
+                            warn!("No found {} username", self.username);
+                        }
+                    } else {
+                        error!("No found 'user' key");
                     }
 
                     Value::Object(r)
@@ -242,6 +255,7 @@ impl User {
             .read(true)
             .write(true)
             .create(true)
+            .truncate(true)
             .open(format!("{}/users_accounts.json", app.path))
     }
 }
