@@ -169,7 +169,7 @@ async fn find_and_install_minecraft_version(
 }
 
 /// Used to add all file to download on a Downloader
-/// and user can just wait and get statut of the current file downloader
+/// and user can just wait and get status of the current file downloader
 ///
 /// # Examples
 /// ```

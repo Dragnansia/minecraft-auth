@@ -13,9 +13,9 @@ use tokio::{
     task::JoinHandle,
 };
 
-/// This is enum for connection statut
+/// This is enum for connection status
 /// when you try to connect to a account
-pub enum UCStatut {
+pub enum UCStatus {
     /// return the user connection information
     User(User),
 
@@ -29,7 +29,7 @@ pub enum UCStatut {
     /// Other error like channel close for receiver
     OtherError(String),
 
-    /// Juste connection don't have error and is just not finish
+    /// Just connection don't have error and is just not finish
     /// Is Here if you want to do something when is not ready
     Waiting,
 }
@@ -38,35 +38,35 @@ pub enum UCStatut {
 /// where connection is currently working
 #[derive(Debug)]
 pub struct UConnect {
-    receiver: Receiver<UCStatut>,
+    receiver: Receiver<UCStatus>,
     _thread: JoinHandle<()>,
 }
 
 impl UConnect {
-    /// Send UCStatut of the latest result of receiver
+    /// Send UCStatus of the latest result of receiver
     ///
     /// # Example
     /// ```
-    /// let uconnect = mojang_connect("".to_owned(), "".to_owned());
+    /// let u_connect = connect_to_mojang("Username".to_owned(), "Password".to_owned());
     ///
     /// loop {
-    ///     match uconnect.message() {
-    ///         UCStatut::User(u) => println!("{:?}", u),
-    ///         UCStatut::RequestError(err) => println!("{}", err),
-    ///         UCStatut::ConnectionError(err) => println!("{}", err),
-    ///         UCStatut::OtherError(err) => {},
-    ///         UCStatut::Waiting => {},
+    ///     match u_connect.message() {
+    ///         UCStatus::User(u) => println!("{:?}", u),
+    ///         UCStatus::RequestError(err) => println!("{}", err),
+    ///         UCStatus::ConnectionError(err) => println!("{}", err),
+    ///         UCStatus::OtherError(err) => {},
+    ///         UCStatus::Waiting => {},
     ///     }
     /// }
     /// ```
-    pub fn message(&mut self) -> UCStatut {
+    pub fn message(&mut self) -> UCStatus {
         match self.receiver.try_recv() {
             Ok(r) => r,
             Err(err) => {
                 if err == TryRecvError::Disconnected {
-                    UCStatut::OtherError(err.to_string())
+                    UCStatus::OtherError(err.to_string())
                 } else {
-                    UCStatut::Waiting
+                    UCStatus::Waiting
                 }
             }
         }
@@ -264,7 +264,7 @@ impl User {
 }
 
 /// This is the intern connection function for mojang minecraft api
-async fn intern_connect(username: String, password: String, sender: Sender<UCStatut>) {
+async fn intern_connect(username: String, password: String, sender: Sender<UCStatus>) {
     let client = Client::new();
     let body = format!("{{\"agent\": {{\"name\": \"Minecraft\",\"version\":1}},\"username\":\"{}\",\"password\":\"{}\"}}", username, password);
     let res = client
@@ -279,14 +279,14 @@ async fn intern_connect(username: String, password: String, sender: Sender<UCSta
             serde_json::from_str(&data).unwrap_or_default()
         }
         Err(err) => {
-            let _ = sender.send(UCStatut::RequestError(err.to_string())).await;
+            let _ = sender.send(UCStatus::RequestError(err.to_string())).await;
             return;
         }
     };
 
     if let Some(error) = data["errorMessage"].as_str() {
         let _ = sender
-            .send(UCStatut::ConnectionError(error.to_string()))
+            .send(UCStatus::ConnectionError(error.to_string()))
             .await;
     } else {
         let client_token = data["clientToken"].as_str().unwrap().to_string();
@@ -294,7 +294,7 @@ async fn intern_connect(username: String, password: String, sender: Sender<UCSta
         let uuid = data["selectedProfile"]["id"].as_str().unwrap().to_string();
 
         let _ = sender
-            .send(UCStatut::User(User::new(
+            .send(UCStatus::User(User::new(
                 username,
                 uuid,
                 client_token,
