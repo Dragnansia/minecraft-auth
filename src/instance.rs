@@ -477,16 +477,16 @@ pub fn start_instance(app: &MinecraftAuth, user: &User, i: &Instance) -> Result<
             info!("Try to use java command instead");
 
             if !java_is_command() {
-                return Err(
+                return Err(format!(
                     "java command is not found, please reinstall java {}",
-                    version,
-                );
+                    version
+                ));
             }
 
             String::from("java")
         };
 
-        let mut cmd = Command::new(java);
+        let mut cmd = Command::new(java_command);
         cmd.args(i.args(app, user));
 
         #[cfg(windows)]
