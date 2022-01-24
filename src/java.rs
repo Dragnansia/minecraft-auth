@@ -14,11 +14,11 @@ const JAVA_PATH_END_A8: &str = "bin/java";
 #[cfg(target_os = "windows")]
 const JAVA_PATH: &str = "C:\\Program Files\\Java\\";
 #[cfg(target_os = "windows")]
-const JAVA_PATH_END_B8: &str = "bin/java.exe";
+const JAVA_PATH_END_B8: &str = "bin\\java.exe";
 #[cfg(target_os = "windows")]
 const JAVA_FOLDER_NAME_B8: &str = "jre1.";
 #[cfg(target_os = "windows")]
-const JAVA_PATH_END_A8: &str = "bin/java.exe";
+const JAVA_PATH_END_A8: &str = "bin\\java.exe";
 #[cfg(target_os = "windows")]
 const JAVA_FOLDER_NAME_A8: &str = "jdk-";
 
@@ -41,11 +41,7 @@ pub fn find_java_version(version: u8) -> Option<String> {
                 .unwrap()
                 .starts_with(&folder_start)
         }) {
-            Some(format!(
-                "{}/{}",
-                dir.unwrap().path().to_str().unwrap(),
-                end_path
-            ))
+            Some(format!("{}/{}", dir.unwrap().path().to_str()?, end_path))
         } else {
             None
         }

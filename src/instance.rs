@@ -7,7 +7,7 @@ use crate::{
     version::{get_artifact, get_classifiers, manifest},
     MinecraftAuth,
 };
-use log::error;
+use log::{error, info};
 use serde_json::Value;
 #[cfg(target_os = "windows")]
 use std::os::windows::process::CommandExt;
@@ -465,7 +465,20 @@ pub fn start_instance(app: &MinecraftAuth, user: &User, i: &Instance) -> Result<
                 Err(err) => Err(err.to_string()),
             }
         } else {
-            Err(format!("No found java version {}", version))
+            error!("No found java version {}", version);
+            info!("Try to use java command instead");
+
+            let mut cmd = Command::new("java");
+            cmd.args(i.args(app, user));
+
+            #[cfg(windows)]
+            // No open console windows when spawn command
+            cmd.creation_flags(0x08000000);
+
+            match cmd.spawn() {
+                Ok(process) => Ok(process),
+                Err(err) => Err(err.to_string()),
+            }
         }
     } else {
         Err("No found javaVersion param on Instance".to_string())
