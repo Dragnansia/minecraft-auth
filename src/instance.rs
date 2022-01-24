@@ -13,6 +13,7 @@ use serde_json::Value;
 use std::os::windows::process::CommandExt;
 use std::{
     collections::HashMap,
+    env,
     fmt::{self, Display, Formatter},
     fs::{create_dir_all, File},
     io::{BufRead, BufReader, Write},
@@ -448,10 +449,23 @@ pub fn get_all_libs_of_version(app: &MinecraftAuth, version: &str) -> String {
     libs
 }
 
+fn change_current_dir<P: AsRef<Path>>(dir: P) {
+    let _ = env::set_current_dir(dir);
+}
+
 // Find better java version for version
 /// Start minecraft instance and return a child process
 pub fn start_instance(app: &MinecraftAuth, user: &User, i: &Instance) -> Result<Child, String> {
     if let DataParam::Int(version) = i.param("javaVersion") {
+        let current_dir = match env::current_dir() {
+            Ok(d) => d,
+            Err(err) => {
+                return Err(err.to_string());
+            }
+        };
+
+        change_current_dir(i.param("gameDir").to_string());
+
         if let Some(java) = find_java_version(version as u8) {
             let mut cmd = Command::new(java);
             cmd.args(i.args(app, user));
@@ -461,7 +475,10 @@ pub fn start_instance(app: &MinecraftAuth, user: &User, i: &Instance) -> Result<
             cmd.creation_flags(0x08000000);
 
             match cmd.spawn() {
-                Ok(process) => Ok(process),
+                Ok(process) => {
+                    change_current_dir(current_dir);
+                    Ok(process)
+                }
                 Err(err) => Err(err.to_string()),
             }
         } else {
@@ -476,7 +493,10 @@ pub fn start_instance(app: &MinecraftAuth, user: &User, i: &Instance) -> Result<
             cmd.creation_flags(0x08000000);
 
             match cmd.spawn() {
-                Ok(process) => Ok(process),
+                Ok(process) => {
+                    change_current_dir(current_dir);
+                    Ok(process)
+                }
                 Err(err) => Err(err.to_string()),
             }
         }
