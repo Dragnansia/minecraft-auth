@@ -453,6 +453,10 @@ fn change_current_dir<P: AsRef<Path>>(dir: P) {
     let _ = env::set_current_dir(dir);
 }
 
+fn java_is_command() -> bool {
+    Command::new("java").arg("-h").output().is_ok()
+}
+
 // Find better java version for version
 /// Start minecraft instance and return a child process
 pub fn start_instance(app: &MinecraftAuth, user: &User, i: &Instance) -> Result<Child, String> {
@@ -466,39 +470,35 @@ pub fn start_instance(app: &MinecraftAuth, user: &User, i: &Instance) -> Result<
 
         change_current_dir(i.param("gameDir").to_string());
 
-        if let Some(java) = find_java_version(version as u8) {
-            let mut cmd = Command::new(java);
-            cmd.args(i.args(app, user));
-
-            #[cfg(windows)]
-            // No open console windows when spawn command
-            cmd.creation_flags(0x08000000);
-
-            match cmd.spawn() {
-                Ok(process) => {
-                    change_current_dir(current_dir);
-                    Ok(process)
-                }
-                Err(err) => Err(err.to_string()),
-            }
+        let java_command = if let Some(java) = find_java_version(version as u8) {
+            java
         } else {
             error!("No found java version {}", version);
             info!("Try to use java command instead");
 
-            let mut cmd = Command::new("java");
-            cmd.args(i.args(app, user));
-
-            #[cfg(windows)]
-            // No open console windows when spawn command
-            cmd.creation_flags(0x08000000);
-
-            match cmd.spawn() {
-                Ok(process) => {
-                    change_current_dir(current_dir);
-                    Ok(process)
-                }
-                Err(err) => Err(err.to_string()),
+            if !java_is_command() {
+                return Err(
+                    "java command is not found, please reinstall java {}",
+                    version,
+                );
             }
+
+            String::from("java")
+        };
+
+        let mut cmd = Command::new(java);
+        cmd.args(i.args(app, user));
+
+        #[cfg(windows)]
+        // No open console windows when spawn command
+        cmd.creation_flags(0x08000000);
+
+        match cmd.spawn() {
+            Ok(process) => {
+                change_current_dir(current_dir);
+                Ok(process)
+            }
+            Err(err) => Err(err.to_string()),
         }
     } else {
         Err("No found javaVersion param on Instance".to_string())
