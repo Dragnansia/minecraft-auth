@@ -297,6 +297,10 @@ impl Instance {
             format!("-Xms{}m", self.param("ramMin")),
             format!("-Xmx{}m", self.param("ramMax")),
             format!("-Djava.library.path={}", self.param("gameDir")),
+            format!(
+                "-Dorg.lwjgl.librarypath={}",
+                self.param("nativeDir")
+            ),
             format!("-Dminecraft.launcher.brand={}", app.name),
             "-Dminecraft.launcher.version=2.1".to_string(),
             "-cp".to_string(),
