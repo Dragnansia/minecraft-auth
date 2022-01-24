@@ -296,11 +296,7 @@ impl Instance {
             "-XX:HeapDumpPath=MojangTricksIntelDriversForPerformance_javaw.exe_minecraft.exe.heapdump".into(),
             format!("-Xms{}m", self.param("ramMin")),
             format!("-Xmx{}m", self.param("ramMax")),
-            format!("-Djava.library.path={}", self.param("nativeDir")),
-            format!(
-                "-Dorg.lwjgl.librarypath={}",
-                self.param("nativeDir")
-            ),
+            format!("-Djava.library.path={}", self.param("gameDir")),
             format!("-Dminecraft.launcher.brand={}", app.name),
             "-Dminecraft.launcher.version=2.1".to_string(),
             "-cp".to_string(),
