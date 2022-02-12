@@ -12,15 +12,8 @@ use std::{
 fn intern_manifest(p: &str) -> Option<Value> {
     let path = Path::new(p);
     if path.exists() && path.is_file() {
-        if let Ok(file_content) = read_to_string(path) {
-            if let Ok(root) = serde_json::from_str(&file_content) {
-                Some(root)
-            } else {
-                None
-            }
-        } else {
-            None
-        }
+        let file_content = read_to_string(path).ok()?;
+        serde_json::from_str(&file_content).ok()
     } else {
         None
     }
@@ -76,11 +69,11 @@ async fn download_libraries(
 
     if let Some(array) = libs {
         array.iter().for_each(|a| {
-            if let Some(artifact) = get_artifact(&a) {
+            if let Some(artifact) = get_artifact(a) {
                 add_download_with_lib_info(artifact, &lib_path, files);
             }
 
-            if let Some(classifiers) = get_classifiers(&a) {
+            if let Some(classifiers) = get_classifiers(a) {
                 add_download_with_lib_info(classifiers, &lib_path, files);
             }
         });
@@ -108,14 +101,15 @@ async fn download_assets(app: &MinecraftAuth, assets: &Value, files: &mut Vec<Fi
     let id = assets["id"].as_str().unwrap();
 
     let path = format!("{}/assets", app.path);
-    if let Ok(_) = download_manifest(
+    if download_manifest(
         &format!("{}/indexes/", path),
         assets["url"].as_str().unwrap(),
-        &id,
+        id,
     )
     .await
+    .is_ok()
     {
-        if let Some(manifest) = version_manifest(app, &id) {
+        if let Some(manifest) = version_manifest(app, id) {
             for m in manifest["objects"].as_object().unwrap() {
                 let hash = m.1["hash"].as_str().unwrap();
                 let f = &hash[..2];

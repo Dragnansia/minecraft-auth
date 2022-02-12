@@ -248,7 +248,7 @@ impl Instance {
         }
 
         if self.is_new {
-            install_natives_file(app, &path, &manifest);
+            install_natives_file(app, &path, manifest);
             self.save_config();
         }
     }

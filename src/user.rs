@@ -105,16 +105,13 @@ impl User {
         if path.exists() && path.is_file() {
             if let Ok(file_content) = read_to_string(path) {
                 let root: Value = serde_json::from_str(&file_content).unwrap();
-                if let Some(user) = root["users"].get(&username) {
-                    Some(Self {
-                        username,
-                        uuid: user["uuid"].as_str().unwrap().to_string(),
-                        client_token: user["client_token"].as_str().unwrap().to_string(),
-                        access_token: user["access_token"].as_str().unwrap().to_string(),
-                    })
-                } else {
-                    None
-                }
+
+                root["users"].get(&username).map(|user| Self {
+                    username,
+                    uuid: user["uuid"].as_str().unwrap().to_string(),
+                    client_token: user["client_token"].as_str().unwrap().to_string(),
+                    access_token: user["access_token"].as_str().unwrap().to_string(),
+                })
             } else {
                 None
             }
@@ -130,15 +127,12 @@ impl User {
             if let Ok(file_content) = read_to_string(path) {
                 if let Ok(root) = serde_json::from_str::<Value>(&file_content) {
                     if let Some(user) = root["users"].as_object() {
-                        match user.iter().last() {
-                            Some(user) => Some(Self {
-                                username: user.0.clone(),
-                                uuid: user.1["uuid"].as_str().unwrap().to_string(),
-                                client_token: user.1["client_token"].as_str().unwrap().to_string(),
-                                access_token: user.1["access_token"].as_str().unwrap().to_string(),
-                            }),
-                            None => None,
-                        }
+                        user.iter().last().map(|user| Self {
+                            username: user.0.clone(),
+                            uuid: user.1["uuid"].as_str().unwrap().to_string(),
+                            client_token: user.1["client_token"].as_str().unwrap().to_string(),
+                            access_token: user.1["access_token"].as_str().unwrap().to_string(),
+                        })
                     } else {
                         None
                     }
@@ -192,7 +186,7 @@ impl User {
 
                     Value::Object(r)
                 }
-                v => v.clone(),
+                v => v,
             };
 
             let new_content = serde_json::to_string(&el).unwrap();
@@ -243,7 +237,7 @@ impl User {
 
                     Value::Object(r)
                 }
-                v => v.clone(),
+                v => v,
             };
 
             let new_content = serde_json::to_string(&el).unwrap();
