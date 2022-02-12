@@ -149,7 +149,7 @@ impl User {
         let root: Value = serde_json::from_str(&content)?;
         let el = match root {
             Value::Object(mut r) => {
-                if !r.contains_key("users") {
+                if r.contains_key("users") {
                     if let Some(users) = r["users"].as_object_mut() {
                         if !users.contains_key(&self.username) {
                             return Err(
