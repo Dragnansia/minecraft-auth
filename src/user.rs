@@ -150,23 +150,26 @@ impl User {
         let el = match root {
             Value::Object(mut r) => {
                 if !r.contains_key("users") {
-                    return Err("No entry key for 'users'".into());
-                }
+                    if let Some(users) = r["users"].as_object_mut() {
+                        if !users.contains_key(&self.username) {
+                            return Err(
+                                format!("No user with this username: {}", self.username).into()
+                            );
+                        }
 
-                if let Some(users) = r["users"].as_object_mut() {
-                    if !users.contains_key(&self.username) {
-                        return Err(format!("No user with this username: {}", self.username).into());
-                    }
+                        if let Some(user) = users[&self.username].as_object_mut() {
+                            user["uuid"] = Value::String(self.uuid.clone());
+                            user["access_token"] = Value::String(self.access_token.clone());
+                            user["client_token"] = Value::String(self.client_token.clone());
+                        } else {
+                            let mut user = Map::new();
+                            user.insert(
+                                self.username.clone(),
+                                Value::Object(self.convert_to_map()),
+                            );
 
-                    if let Some(user) = users[&self.username].as_object_mut() {
-                        user["uuid"] = Value::String(self.uuid.clone());
-                        user["access_token"] = Value::String(self.access_token.clone());
-                        user["client_token"] = Value::String(self.client_token.clone());
-                    } else {
-                        let mut user = Map::new();
-                        user.insert(self.username.clone(), Value::Object(self.convert_to_map()));
-
-                        users.insert(self.username.clone(), Value::Object(user));
+                            users.insert(self.username.clone(), Value::Object(user));
+                        }
                     }
                 } else {
                     let mut user = Map::new();
