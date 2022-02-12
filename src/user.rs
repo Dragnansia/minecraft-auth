@@ -149,7 +149,7 @@ impl User {
         let root: Value = serde_json::from_str(&content)?;
         let el = match root {
             Value::Object(mut r) => {
-                if let Ok(users) = r["users"].as_object_mut().ok_or("") {
+                if let Some(users) = r["users"].as_object_mut() {
                     if let Some(user) = users[&self.username].as_object_mut() {
                         user["uuid"] = Value::String(self.uuid.clone());
                         user["access_token"] = Value::String(self.access_token.clone());
