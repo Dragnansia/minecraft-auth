@@ -35,20 +35,17 @@ pub fn find_java_version(version: u8) -> Option<String> {
     };
 
     let folder_start = format!("{}{}", folder_java_begin, version);
-    for java_path in JAVA_PATH {
-        if let Ok(mut dir_content) = fs::read_dir(java_path) {
-            if let Some(dir) = dir_content.find(|el| {
-                el.as_ref()
-                    .unwrap()
-                    .file_name()
-                    .to_str()
-                    .unwrap()
-                    .starts_with(&folder_start)
-            }) {
-                return Some(format!("{}/{}", dir.unwrap().path().to_str()?, end_path));
-            }
-        }
-    }
+    JAVA_PATH.iter().find_map(|j| {
+        let mut dir_content = fs::read_dir(j).ok()?;
+        let dir = dir_content.find(|el| {
+            el.as_ref()
+                .unwrap()
+                .file_name()
+                .to_str()
+                .unwrap()
+                .starts_with(&folder_start)
+        })?;
 
-    None
+        Some(format!("{}/{}", dir.ok()?.path().to_str()?, end_path))
+    })
 }

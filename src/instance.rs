@@ -1,5 +1,6 @@
 use crate::{
     downloader::FileInfo,
+    error,
     java::find_java_version,
     native::os_native_name,
     user::User,
@@ -16,7 +17,7 @@ use std::{
     env,
     fmt::{self, Display, Formatter},
     fs::{create_dir_all, File},
-    io::{BufRead, BufReader, Write},
+    io::{self, BufRead, BufReader, Write},
     path::Path,
     process::{Child, Command},
 };
@@ -45,6 +46,22 @@ impl DataParam {
             DataParam::Int(i) => *i > 0,
             DataParam::Str(s) => s == "true",
             DataParam::None => false,
+        }
+    }
+
+    pub fn as_int(&self) -> Option<i32> {
+        if let DataParam::Int(val) = self {
+            Some(*val)
+        } else {
+            None
+        }
+    }
+
+    pub fn as_string(&self) -> Option<String> {
+        if let DataParam::Str(val) = self {
+            Some(val.clone())
+        } else {
+            None
         }
     }
 }
@@ -123,7 +140,7 @@ impl Instance {
         name: &str,
         version: &str,
         config: Config,
-    ) -> Result<Self, InstanceCreateError> {
+    ) -> Result<Self, error::Error> {
         let path = format!("{}/instances/{}", app.path, &name);
         let config_file_path = format!("{}/config.cfg", path);
         if Path::new(&config_file_path).exists() {
@@ -157,14 +174,13 @@ impl Instance {
                 param,
             };
 
-            if let Some(manifest) = manifest(app, version) {
-                this.end_init_instance(app, &manifest, name, version);
-                Ok(this)
-            } else {
-                Err(InstanceCreateError::NoFoundManifestVersion)
-            }
+            let manifest =
+                manifest(app, version).ok_or(InstanceCreateError::NoFoundManifestVersion)?;
+
+            this.end_init_instance(app, &manifest, name, version);
+            Ok(this)
         } else {
-            Err(InstanceCreateError::FolderCreateError)
+            Err(InstanceCreateError::FolderCreateError.into())
         }
     }
 
@@ -174,7 +190,7 @@ impl Instance {
         manifest: &Value,
         name: &str,
         version: &str,
-    ) {
+    ) -> Option<()> {
         let path = format!("{}/instances/{}", app.path, name);
 
         self.add_param("name", Param::new(DataParam::Str(name.to_string()), false));
@@ -182,7 +198,10 @@ impl Instance {
 
         self.add_param(
             "libs",
-            Param::new(DataParam::Str(get_all_libs_of_version(app, version)), false),
+            Param::new(
+                DataParam::Str(get_all_libs_of_version(app, version)?),
+                false,
+            ),
         );
         self.add_param(
             "assetsDir",
@@ -199,14 +218,14 @@ impl Instance {
         self.add_param(
             "javaVersion",
             Param::new(
-                DataParam::Int(manifest["javaVersion"]["majorVersion"].as_i64().unwrap() as i32),
+                DataParam::Int(manifest["javaVersion"]["majorVersion"].as_i64()? as i32),
                 false,
             ),
         );
         self.add_param(
             "assetIndex",
             Param::new(
-                DataParam::Str(manifest["assets"].as_str().unwrap().to_string()),
+                DataParam::Str(manifest["assets"].as_str()?.to_string()),
                 false,
             ),
         );
@@ -234,29 +253,31 @@ impl Instance {
             self.add_param(
                 "versionType",
                 Param::new(
-                    DataParam::Str(manifest["type"].as_str().unwrap().to_string()),
+                    DataParam::Str(manifest["type"].as_str()?.to_string()),
                     false,
                 ),
             );
             self.add_param(
                 "mainClass",
                 Param::new(
-                    DataParam::Str(manifest["mainClass"].as_str().unwrap().to_string()),
+                    DataParam::Str(manifest["mainClass"].as_str()?.to_string()),
                     false,
                 ),
             );
         }
 
         if self.is_new {
-            install_natives_file(app, &path, manifest);
-            self.save_config();
+            install_natives_file(app, &path, manifest).ok()?;
+            self.save_config().ok()?;
         }
+
+        Some(())
     }
 
     // Need to find a method to download forge file
-    pub fn install_forge(&mut self) {
+    pub fn install_forge(&mut self) -> Result<(), error::Error> {
         self.add_param("useForge", Param::new(DataParam::Str("true".into()), true));
-        self.save_config();
+        self.save_config()?;
 
         self.update_param("versionType", DataParam::Str("Forge".to_string()));
         self.update_param(
@@ -270,6 +291,8 @@ impl Instance {
                 false,
             ),
         );
+
+        Ok(())
     }
 
     pub fn add_param(&mut self, name: &str, val: Param) -> Option<Param> {
@@ -284,10 +307,11 @@ impl Instance {
         }
     }
 
-    pub fn update_param(&mut self, name: &str, val: DataParam) {
-        if let Some(v) = self.param.get_mut(name) {
-            v.data = val;
-        }
+    pub fn update_param(&mut self, name: &str, val: DataParam) -> Option<()> {
+        let v = self.param.get_mut(name)?;
+        v.data = val;
+
+        Some(())
     }
 
     /// Return vec with all arguments for start instance
@@ -337,14 +361,12 @@ impl Instance {
         v
     }
 
-    pub fn save_config(&self) {
+    pub fn save_config(&self) -> Result<(), error::Error> {
         let p = format!("{}/config.cfg", self.param("path"));
-        match File::create(p) {
-            Ok(mut file) => {
-                file.write_all(self.config_to_string().as_bytes()).unwrap();
-            }
-            Err(err) => println!("[Error] {:?}", err),
-        };
+        let mut file = File::create(p)?;
+        file.write_all(self.config_to_string().as_bytes())?;
+
+        Ok(())
     }
 
     fn config_to_string(&self) -> String {
@@ -361,96 +383,94 @@ impl Instance {
     }
 
     /// Load instance from config file
-    pub fn from_config(app: &MinecraftAuth, name: &str) -> Result<Self, InstanceCreateError> {
+    pub fn from_config(app: &MinecraftAuth, name: &str) -> Result<Self, error::Error> {
         let p = format!("{}/instances/{}/config.cfg", app.path, name);
-        match File::open(&p) {
-            Ok(file) => {
-                let buffer = BufReader::new(file);
-                let mut param = HashMap::new();
-                buffer.lines().for_each(|line| {
-                    let l = line.unwrap();
-                    let (name, val) = scan!(l, '=', String, String);
-                    param.insert(
-                        name.unwrap(),
-                        Param::new(DataParam::Str(val.unwrap()), true),
-                    );
-                });
+        let file = File::open(&p)?;
+        let buffer = BufReader::new(file);
+        let mut param = HashMap::new();
+        buffer.lines().for_each(|line| {
+            let l = line.unwrap();
+            let (name, val) = scan!(l, '=', String, String);
+            param.insert(
+                name.unwrap(),
+                Param::new(DataParam::Str(val.unwrap()), true),
+            );
+        });
 
-                let mut this = Self {
-                    is_new: false,
-                    param,
-                };
+        let mut this = Self {
+            is_new: false,
+            param,
+        };
 
-                if let DataParam::Str(version) = this.param("version") {
-                    if let Some(manifest) = manifest(app, &version) {
-                        this.end_init_instance(app, &manifest, name, &version);
-                        Ok(this)
-                    } else {
-                        Err(InstanceCreateError::NoFoundManifestVersion)
-                    }
-                } else {
-                    Err(InstanceCreateError::NoFoundVersion)
-                }
-            }
-            Err(err) => Err(InstanceCreateError::ReadConfigError(err.to_string())),
-        }
+        let version = this
+            .param("version")
+            .as_string()
+            .ok_or(InstanceCreateError::NoFoundVersion)?;
+        let manifest =
+            manifest(app, &version).ok_or(InstanceCreateError::NoFoundManifestVersion)?;
+        this.end_init_instance(app, &manifest, name, &version);
+        Ok(this)
     }
 }
 
 /// Install natives files on `{instance_path}/natives`
-fn install_natives_file(app: &MinecraftAuth, instance_path: &str, manifest: &Value) {
+fn install_natives_file(
+    app: &MinecraftAuth,
+    instance_path: &str,
+    manifest: &Value,
+) -> Result<(), error::Error> {
     let native_dir = format!("{}/natives", instance_path);
-    for libs in manifest["libraries"].as_array().unwrap() {
+    for libs in manifest["libraries"]
+        .as_array()
+        .ok_or("Can't find libraries on manifest")?
+    {
         let classifiers = &libs["downloads"]["classifiers"];
-        if !classifiers.is_null() {
-            let native = &classifiers[os_native_name()];
-            if native.is_null() {
-                continue;
-            }
-
-            let file_path = format!(
-                "{}/libraries/{}",
-                app.path,
-                native["path"].as_str().unwrap()
-            );
-
-            match File::open(file_path) {
-                Ok(file) => {
-                    let mut zip = ZipArchive::new(file).unwrap();
-                    let _ = zip.extract(native_dir.clone());
-                }
-                Err(err) => {
-                    error!("{}", err);
-                }
-            }
+        if classifiers.is_null() {
+            continue;
         }
+
+        let native = &classifiers[os_native_name()];
+        if native.is_null() {
+            continue;
+        }
+
+        let file_path = format!(
+            "{}/libraries/{}",
+            app.path,
+            native["path"].as_str().ok_or("No path")?
+        );
+
+        let file = File::open(file_path)?;
+        let mut zip = ZipArchive::new(file)?;
+        zip.extract(native_dir.clone())?;
     }
+
+    Ok(())
 }
 
-pub fn get_all_libs_of_version(app: &MinecraftAuth, version: &str) -> String {
+pub fn get_all_libs_of_version(app: &MinecraftAuth, version: &str) -> Option<String> {
     let mut libs = String::new();
     let s = if cfg!(windows) { ';' } else { ':' };
 
-    if let Some(manifest) = manifest(app, version) {
-        for lib in manifest["libraries"].as_array().unwrap() {
-            let l = if let Some(artifact) = get_artifact(lib) {
-                artifact["path"].as_str().unwrap()
-            } else if let Some(classifiers) = get_classifiers(lib) {
-                classifiers["path"].as_str().unwrap()
-            } else {
-                ""
-            };
+    let manifest = manifest(app, version)?;
+    for lib in manifest["libraries"].as_array()? {
+        let l = if let Some(artifact) = get_artifact(lib) {
+            artifact["path"].as_str()?
+        } else if let Some(classifiers) = get_classifiers(lib) {
+            classifiers["path"].as_str()?
+        } else {
+            ""
+        };
 
-            libs += &format!("{}/libraries/{}{}", app.path, l, s);
-        }
+        libs += &format!("{}/libraries/{}{}", app.path, l, s);
     }
 
     libs += &format!("{}/clients/{}/client.jar", app.path, version);
-    libs
+    Some(libs)
 }
 
-fn change_current_dir<P: AsRef<Path>>(dir: P) {
-    let _ = env::set_current_dir(dir);
+fn change_current_dir<P: AsRef<Path>>(dir: P) -> io::Result<()> {
+    env::set_current_dir(dir)
 }
 
 fn java_is_command() -> bool {
@@ -459,17 +479,15 @@ fn java_is_command() -> bool {
 
 // Find better java version for version
 /// Start minecraft instance and return a child process
-pub fn start_instance(app: &MinecraftAuth, user: &User, i: &Instance) -> Result<Child, String> {
+pub fn start_instance(
+    app: &MinecraftAuth,
+    user: &User,
+    i: &Instance,
+) -> Result<Child, error::Error> {
     if let DataParam::Int(version) = i.param("javaVersion") {
-        let current_dir = match env::current_dir() {
-            Ok(d) => d,
-            Err(err) => {
-                return Err(err.to_string());
-            }
-        };
+        let current_dir = env::current_dir()?;
 
-        change_current_dir(i.param("gameDir").to_string());
-
+        change_current_dir(i.param("gameDir").to_string())?;
         let java_command = if let Some(java) = find_java_version(version as u8) {
             java
         } else {
@@ -480,7 +498,8 @@ pub fn start_instance(app: &MinecraftAuth, user: &User, i: &Instance) -> Result<
                 return Err(format!(
                     "java command is not found, please reinstall java {}",
                     version
-                ));
+                )
+                .into());
             }
 
             String::from("java")
@@ -493,14 +512,10 @@ pub fn start_instance(app: &MinecraftAuth, user: &User, i: &Instance) -> Result<
         // No open console windows when spawn command
         cmd.creation_flags(0x08000000);
 
-        match cmd.spawn() {
-            Ok(process) => {
-                change_current_dir(current_dir);
-                Ok(process)
-            }
-            Err(err) => Err(err.to_string()),
-        }
+        let process = cmd.spawn()?;
+        change_current_dir(current_dir)?;
+        Ok(process)
     } else {
-        Err("No found javaVersion param on Instance".to_string())
+        Err("No found javaVersion param on Instance".into())
     }
 }

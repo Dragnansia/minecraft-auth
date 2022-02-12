@@ -1,5 +1,6 @@
 use crate::{
     downloader::{download_file, FileInfo},
+    error,
     native::os_native_name,
     MinecraftAuth,
 };
@@ -27,7 +28,7 @@ pub fn version_manifest(app: &MinecraftAuth, version: &str) -> Option<Value> {
     intern_manifest(&format!("{}/assets/indexes/{}.json", app.path, version))
 }
 
-async fn download_manifest(path: &str, url: &str, id: &str) -> Result<(), String> {
+async fn download_manifest(path: &str, url: &str, id: &str) -> Result<(), error::Error> {
     download_file(url.to_string(), format!("{}/{}.json", path, id)).await
 }
 
@@ -49,14 +50,23 @@ pub fn get_artifact(val: &Value) -> Option<&Value> {
     }
 }
 
-fn add_download_with_lib_info(infos: &Value, lib_path: &str, files: &mut Vec<FileInfo>) {
-    let url = infos["url"].as_str().unwrap();
-    let path = format!("{}{}", lib_path, infos["path"].as_str().unwrap());
-    let size = infos["size"].as_u64().unwrap();
-    let file = Path::new(&path);
-    if !file.exists() || File::open(&path).unwrap().metadata().unwrap().len() != size {
+fn add_download_with_lib_info(
+    infos: &Value,
+    lib_path: &str,
+    files: &mut Vec<FileInfo>,
+) -> Option<()> {
+    let url = infos["url"].as_str()?;
+    let path = format!("{}{}", lib_path, infos["path"].as_str()?);
+    let size = infos["size"].as_u64()?;
+
+    let p = Path::new(&path);
+    let file = File::open(&path).ok()?;
+
+    if !p.exists() || file.metadata().ok()?.len() != size {
         files.push(FileInfo::new(url.to_string(), path, size));
     }
+
+    Some(())
 }
 
 // Find a way to return a downloader to user with all download file
@@ -64,20 +74,21 @@ async fn download_libraries(
     app: &MinecraftAuth,
     libs: Option<&Vec<Value>>,
     files: &mut Vec<FileInfo>,
-) {
+) -> Option<()> {
     let lib_path = format!("{}/libraries/", app.path);
+    let array = libs?;
 
-    if let Some(array) = libs {
-        array.iter().for_each(|a| {
-            if let Some(artifact) = get_artifact(a) {
-                add_download_with_lib_info(artifact, &lib_path, files);
-            }
+    array.iter().for_each(|a| {
+        if let Some(artifact) = get_artifact(a) {
+            add_download_with_lib_info(artifact, &lib_path, files);
+        }
 
-            if let Some(classifiers) = get_classifiers(a) {
-                add_download_with_lib_info(classifiers, &lib_path, files);
-            }
-        });
-    }
+        if let Some(classifiers) = get_classifiers(a) {
+            add_download_with_lib_info(classifiers, &lib_path, files);
+        }
+    });
+
+    Some(())
 }
 
 async fn download_client(
@@ -85,46 +96,57 @@ async fn download_client(
     client: &Value,
     version: &str,
     files: &mut Vec<FileInfo>,
-) {
+) -> Option<()> {
     let path = format!("{}/clients/{}/client.jar", app.path, version);
-    let size = client["size"].as_u64().unwrap();
-    if !Path::new(&path).exists() || File::open(&path).unwrap().metadata().unwrap().len() != size {
-        files.push(FileInfo::new(
-            client["url"].as_str().unwrap().to_string(),
-            path,
-            size,
-        ));
+    let size = client["size"].as_u64()?;
+
+    let file = File::open(&path).ok()?;
+    let p = Path::new(&path);
+
+    if !p.exists() || file.metadata().ok()?.len() != size {
+        files.push(FileInfo::new(client["url"].as_str()?.into(), path, size));
     }
+
+    Some(())
 }
 
-async fn download_assets(app: &MinecraftAuth, assets: &Value, files: &mut Vec<FileInfo>) {
-    let id = assets["id"].as_str().unwrap();
-
+async fn download_assets(
+    app: &MinecraftAuth,
+    assets: &Value,
+    files: &mut Vec<FileInfo>,
+) -> Option<()> {
+    let id = assets["id"].as_str()?;
+    let url = assets["url"].as_str()?;
     let path = format!("{}/assets", app.path);
-    if download_manifest(
-        &format!("{}/indexes/", path),
-        assets["url"].as_str().unwrap(),
-        id,
-    )
-    .await
-    .is_ok()
-    {
-        if let Some(manifest) = version_manifest(app, id) {
-            for m in manifest["objects"].as_object().unwrap() {
-                let hash = m.1["hash"].as_str().unwrap();
-                let f = &hash[..2];
-                let p = format!("{}/objects/{}/{}", path, f, hash);
-                let url = format!("http://resources.download.minecraft.net/{}/{}", f, hash);
-                let size = m.1["size"].as_u64().unwrap();
+    let indexes_path = format!("{}/indexes/", path);
 
-                if !Path::new(&p).exists()
-                    || File::open(&p).unwrap().metadata().unwrap().len() != size
-                {
-                    files.push(FileInfo::new(url.to_string(), p, size));
+    download_manifest(&indexes_path, url, id).await.ok()?;
+
+    let manifest = version_manifest(app, id)?;
+    files.append(
+        &mut manifest["objects"]
+            .as_object()?
+            .iter()
+            .filter_map(|object| {
+                let hash = object.1["hash"].as_str()?;
+                let b = &hash[..2];
+                let p = format!("{}/objects/{}/{}", path, b, hash);
+                let url = format!("http://resources.download.minecraft.net/{}/{}", b, hash);
+                let size = object.1["size"].as_u64()?;
+
+                let path = Path::new(&p);
+                let file = File::open(&p).ok()?;
+
+                if path.exists() || file.metadata().ok()?.len() != size {
+                    return None;
                 }
-            }
-        }
-    }
+
+                Some(FileInfo::new(url, p, size))
+            })
+            .collect(),
+    );
+
+    Some(())
 }
 
 async fn find_and_install_minecraft_version(
@@ -132,34 +154,36 @@ async fn find_and_install_minecraft_version(
     version: &str,
     m: &Value,
     files: &mut Vec<FileInfo>,
-) {
-    if let Some(versions) = m["versions"].as_array() {
-        for v in versions {
-            let id = v["id"].as_str().unwrap();
-            if version == id {
-                if let Some(m) = manifest(app, id) {
-                    download_libraries(app, m["libraries"].as_array(), files).await;
-                    download_client(app, &m["downloads"]["client"], version, files).await;
-                    download_assets(app, &m["assetIndex"], files).await;
-                } else {
-                    let path = format!("{}/versions/", app.path);
-                    match download_manifest(&path, v["url"].as_str().unwrap(), id).await {
-                        Ok(_) => {
-                            let m = manifest(app, id).unwrap();
-                            download_libraries(app, m["libraries"].as_array(), files).await;
-                            download_client(app, &m["downloads"]["client"], version, files).await;
-                            download_assets(app, &m["assetIndex"], files).await;
-                        }
-                        Err(err) => println!("[Error] {}", err),
-                    }
-                }
+) -> Result<(), error::Error> {
+    let versions = m["versions"]
+        .as_array()
+        .ok_or("Can't find versions on manifest json")?;
 
-                break;
-            }
-        }
+    let v = versions
+        .iter()
+        .find(|v| {
+            let id = v["id"].as_str().unwrap();
+            version == id
+        })
+        .ok_or("No version found")?;
+    let id = v["id"].as_str().ok_or("Error to convert ID")?;
+
+    if let Some(m) = manifest(app, id) {
+        download_libraries(app, m["libraries"].as_array(), files).await;
+        download_client(app, &m["downloads"]["client"], version, files).await;
+        download_assets(app, &m["assetIndex"], files).await;
     } else {
-        println!("Can't find versions on manifest json");
+        let path = format!("{}/versions/", app.path);
+        let url = v["url"].as_str().ok_or("Error to convert URL")?;
+        download_manifest(&path, url, id).await?;
+
+        let m = manifest(app, id).ok_or("No manifest")?;
+        download_libraries(app, m["libraries"].as_array(), files).await;
+        download_client(app, &m["downloads"]["client"], version, files).await;
+        download_assets(app, &m["assetIndex"], files).await;
     }
+
+    Ok(())
 }
 
 /// Used to add all file to download on a Downloader
@@ -168,30 +192,27 @@ async fn find_and_install_minecraft_version(
 /// # Examples
 /// ```
 /// ```
-pub async fn file_to_download_for_version(app: &MinecraftAuth, version: String) -> Vec<FileInfo> {
+pub async fn file_to_download_for_version(
+    app: &MinecraftAuth,
+    version: String,
+) -> Result<Vec<FileInfo>, error::Error> {
     let mut files = vec![];
 
     if let Some(manifest) = manifest(app, "manifest_version") {
-        find_and_install_minecraft_version(app, &version, &manifest, &mut files).await;
+        find_and_install_minecraft_version(app, &version, &manifest, &mut files).await?;
     } else {
         let path = format!("{}/versions", app.path);
-        match download_manifest(
+        download_manifest(
             &path,
             "https://launchermeta.mojang.com/mc/game/version_manifest.json",
             "manifest_version",
         )
-        .await
-        {
-            Ok(_) => {
-                if let Some(manifest) = manifest(app, "manifest_version") {
-                    find_and_install_minecraft_version(app, &version, &manifest, &mut files).await;
-                } else {
-                    println!("[Error] Can't find manifest_version file");
-                }
-            }
-            Err(err) => println!("[Error] {}", err),
-        }
+        .await?;
+
+        let manifest =
+            manifest(app, "manifest_version").ok_or("Can't find manifest_version file")?;
+        find_and_install_minecraft_version(app, &version, &manifest, &mut files).await?
     }
 
-    files
+    Ok(files)
 }

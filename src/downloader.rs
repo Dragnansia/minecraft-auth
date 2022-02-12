@@ -8,6 +8,8 @@ use std::{
     path::Path,
 };
 
+use crate::error;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FileInfo {
     pub url: String,
@@ -43,31 +45,23 @@ fn create_folder(folder: &str) {
     create_dir_all(folder).unwrap();
 }
 
-pub async fn download_file(url: String, path: String) -> Result<(), String> {
+pub async fn download_file(url: String, path: String) -> Result<(), error::Error> {
     let client = Client::new();
-    match client.get(&url).send().await {
-        Ok(response) => {
-            path_for_file(just_path(&path));
-            let mut file = match File::create(&path) {
-                Ok(fc) => fc,
-                Err(err) => {
-                    return Err(err.to_string());
-                }
-            };
+    let response = client.get(&url).send().await?;
 
-            let mut stream = response.bytes_stream();
-            while let Some(item) = stream.next().await {
-                let chunk = item
-                    .map_err(|_| "Error while downloading file bytes".to_string())
-                    .unwrap();
+    path_for_file(just_path(&path));
+    let mut file = File::create(&path)?;
 
-                file.write(&chunk)
-                    .map_err(|_| "Error while writing to file".to_string())
-                    .unwrap();
-            }
+    let mut stream = response.bytes_stream();
+    while let Some(item) = stream.next().await {
+        let chunk = item
+            .map_err(|_| "Error while downloading file bytes".to_string())
+            .unwrap();
 
-            Ok(())
-        }
-        Err(err) => Err(err.to_string()),
+        file.write(&chunk)
+            .map_err(|_| "Error while writing to file".to_string())
+            .unwrap();
     }
+
+    Ok(())
 }

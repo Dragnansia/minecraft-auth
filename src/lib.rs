@@ -1,4 +1,7 @@
+use std::fs;
+
 pub mod downloader;
+pub mod error;
 pub mod instance;
 pub mod java;
 pub mod native;
@@ -10,33 +13,21 @@ pub mod version;
 pub struct MinecraftAuth {
     pub name: String,
     pub path: String,
-    pub used_native: bool,
 }
 
 impl MinecraftAuth {
-    pub fn new(name: String, path: String, used_native: bool) -> Self {
-        Self {
-            name,
-            path,
-            used_native,
-        }
+    pub fn new(name: String, path: String) -> Self {
+        Self { name, path }
     }
 
     /// Create MinecraftAuth with just a name, and get
     /// os data dir to create a new folder
-    pub fn new_just_name(name: String, used_native: bool) -> Option<Self> {
-        match dirs::data_dir() {
-            Some(d) => {
-                let pp = d.as_path().to_str().unwrap();
-                let path = format!("{}/{}", pp, name);
-                std::fs::create_dir_all(path.clone()).unwrap();
-                Some(Self {
-                    name,
-                    path,
-                    used_native,
-                })
-            }
-            None => None,
-        }
+    pub fn new_just_name(name: String) -> Option<Self> {
+        let data_dir = dirs::data_dir()?;
+        let temp_path = data_dir.as_path().to_str()?;
+        let path = format!("{}/{}", temp_path, name);
+        fs::create_dir_all(path.clone()).ok()?;
+
+        Some(Self { name, path })
     }
 }

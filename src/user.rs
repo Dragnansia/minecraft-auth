@@ -1,5 +1,4 @@
-use crate::MinecraftAuth;
-use log::{error, info, warn};
+use crate::{error, MinecraftAuth};
 use reqwest::Client;
 use serde_json::{Map, Value};
 use std::{
@@ -15,6 +14,7 @@ use tokio::{
 
 /// This is enum for connection status
 /// when you try to connect to a account
+#[derive(Debug)]
 pub enum UCStatus {
     /// return the user connection information
     User(User),
@@ -102,96 +102,79 @@ impl User {
     pub fn from_config(app: &MinecraftAuth, username: String) -> Option<Self> {
         let p = format!("{}/users_accounts.json", app.path);
         let path = Path::new(&p);
-        if path.exists() && path.is_file() {
-            if let Ok(file_content) = read_to_string(path) {
-                let root: Value = serde_json::from_str(&file_content).unwrap();
-
-                root["users"].get(&username).map(|user| Self {
-                    username,
-                    uuid: user["uuid"].as_str().unwrap().to_string(),
-                    client_token: user["client_token"].as_str().unwrap().to_string(),
-                    access_token: user["access_token"].as_str().unwrap().to_string(),
-                })
-            } else {
-                None
-            }
-        } else {
-            None
+        if !path.exists() || !path.is_file() {
+            return None;
         }
+
+        let file_content = read_to_string(path).ok()?;
+        let root: Value = serde_json::from_str(&file_content).ok()?;
+        let user = root["users"].get(&username)?;
+
+        Some(Self {
+            username,
+            uuid: user["uuid"].as_str()?.to_string(),
+            client_token: user["client_token"].as_str()?.to_string(),
+            access_token: user["access_token"].as_str()?.to_string(),
+        })
     }
 
-    pub fn from_config_last_add(app: &MinecraftAuth) -> Option<Self> {
+    pub fn last_from_config(app: &MinecraftAuth) -> Option<Self> {
         let p = format!("{}/users_accounts.json", app.path);
         let path = Path::new(&p);
-        if path.exists() && path.is_file() {
-            if let Ok(file_content) = read_to_string(path) {
-                if let Ok(root) = serde_json::from_str::<Value>(&file_content) {
-                    if let Some(user) = root["users"].as_object() {
-                        user.iter().last().map(|user| Self {
-                            username: user.0.clone(),
-                            uuid: user.1["uuid"].as_str().unwrap().to_string(),
-                            client_token: user.1["client_token"].as_str().unwrap().to_string(),
-                            access_token: user.1["access_token"].as_str().unwrap().to_string(),
-                        })
-                    } else {
-                        None
-                    }
-                } else {
-                    None
-                }
-            } else {
-                None
-            }
-        } else {
-            None
+        if !path.exists() || !path.is_file() {
+            return None;
         }
+
+        let file_content = read_to_string(path).ok()?;
+        let root = serde_json::from_str::<Value>(&file_content).ok()?;
+        let user = root["users"].as_object()?.iter().last()?;
+
+        Some(Self {
+            username: user.0.clone(),
+            uuid: user.1["uuid"].as_str()?.to_string(),
+            client_token: user.1["client_token"].as_str()?.to_string(),
+            access_token: user.1["access_token"].as_str()?.to_string(),
+        })
     }
 
-    pub fn save_on_file(&self, app: &MinecraftAuth) {
-        if let Ok(mut file) = User::open_user_file(app) {
-            let mut content = String::new();
-            file.read_to_string(&mut content).unwrap();
+    pub fn save_on_file(&self, app: &MinecraftAuth) -> Result<(), error::Error> {
+        let mut file = User::open_user_file(app)?;
+        let mut content = String::new();
+        file.read_to_string(&mut content)?;
 
-            if content.is_empty() {
-                content += "{}";
-            }
+        if content.is_empty() {
+            content += "{}";
+        }
 
-            let root: Value = serde_json::from_str(&content).unwrap();
-            let el = match root {
-                Value::Object(mut r) => {
-                    if r.get("users").is_some() {
-                        if let Value::Object(users) = &mut r["users"] {
-                            if users.contains_key(&self.username) {
-                                if let Value::Object(user) = &mut users[&self.username] {
-                                    user["uuid"] = Value::String(self.uuid.clone());
-                                    user["access_token"] = Value::String(self.access_token.clone());
-                                    user["client_token"] = Value::String(self.client_token.clone());
-                                }
-                            } else {
-                                let mut user = Map::new();
-                                user.insert(
-                                    self.username.clone(),
-                                    Value::Object(self.convert_to_map()),
-                                );
-
-                                users.insert(self.username.clone(), Value::Object(user));
-                            }
-                        }
+        let root: Value = serde_json::from_str(&content)?;
+        let el = match root {
+            Value::Object(mut r) => {
+                if let Ok(users) = r["users"].as_object_mut().ok_or("") {
+                    if let Some(user) = users[&self.username].as_object_mut() {
+                        user["uuid"] = Value::String(self.uuid.clone());
+                        user["access_token"] = Value::String(self.access_token.clone());
+                        user["client_token"] = Value::String(self.client_token.clone());
                     } else {
                         let mut user = Map::new();
                         user.insert(self.username.clone(), Value::Object(self.convert_to_map()));
 
-                        r.insert("users".to_string(), Value::Object(user));
+                        users.insert(self.username.clone(), Value::Object(user));
                     }
-
-                    Value::Object(r)
+                } else {
+                    let mut user = Map::new();
+                    user.insert(self.username.clone(), Value::Object(self.convert_to_map()));
+                    r.insert("users".into(), Value::Object(user));
                 }
-                v => v,
-            };
 
-            let new_content = serde_json::to_string(&el).unwrap();
-            file.write_all(new_content.as_bytes()).unwrap();
-        }
+                Value::Object(r)
+            }
+            v => v,
+        };
+
+        let new_content = serde_json::to_string(&el)?;
+        file.write_all(new_content.as_bytes())?;
+
+        Ok(())
     }
 
     fn convert_to_map(&self) -> Map<String, Value> {
@@ -209,40 +192,27 @@ impl User {
         user_info
     }
 
-    pub fn disconnect(&self, app: &MinecraftAuth) -> Result<(), String> {
-        if let Ok(mut file) = User::open_user_file(app) {
-            let mut content = String::new();
-            file.read_to_string(&mut content).unwrap();
+    pub fn disconnect(&self, app: &MinecraftAuth) -> Result<(), error::Error> {
+        let mut file = User::open_user_file(app)?;
+        let mut content = String::new();
+        file.read_to_string(&mut content)?;
 
-            if content.is_empty() || content == "\n" {
-                return Ok(());
-            }
-
-            let root: Value = serde_json::from_str(&content).unwrap();
-            let el = match root {
-                Value::Object(mut r) => {
-                    if r.contains_key("users") {
-                        if let Value::Object(arr) = &mut r["users"] {
-                            info!(
-                                "Remove {} from User file: {} (user is find on HashMap)",
-                                self.username,
-                                arr.remove(&self.username).is_some()
-                            );
-                        } else {
-                            warn!("No found {} username", self.username);
-                        }
-                    } else {
-                        error!("No found 'user' key");
-                    }
-
-                    Value::Object(r)
-                }
-                v => v,
-            };
-
-            let new_content = serde_json::to_string(&el).unwrap();
-            file.write_all(new_content.as_bytes()).unwrap();
+        if content.is_empty() || content == "\n" {
+            return Ok(());
         }
+
+        let root: Value = serde_json::from_str(&content)?;
+        let el = match root {
+            Value::Object(mut r) => {
+                let arr = r["users"].as_object_mut().ok_or("No found 'user' key")?;
+                arr.remove(&self.username).ok_or("Can't remove user")?;
+                Value::Object(r)
+            }
+            v => v,
+        };
+
+        let new_content = serde_json::to_string(&el).unwrap();
+        file.write_all(new_content.as_bytes()).unwrap();
 
         Ok(())
     }
@@ -258,7 +228,11 @@ impl User {
 }
 
 /// This is the intern connection function for mojang minecraft api
-async fn intern_connect(username: String, password: String, sender: Sender<UCStatus>) {
+async fn intern_connect(
+    username: String,
+    password: String,
+    sender: Sender<UCStatus>,
+) -> Result<(), error::Error> {
     let client = Client::new();
     let body = format!("{{\"agent\": {{\"name\": \"Minecraft\",\"version\":1}},\"username\":\"{}\",\"password\":\"{}\"}}", username, password);
     let res = client
@@ -269,39 +243,52 @@ async fn intern_connect(username: String, password: String, sender: Sender<UCSta
 
     let data: Value = match res {
         Ok(val) => {
-            let data = val.text().await.unwrap_or_default();
-            serde_json::from_str(&data).unwrap_or_default()
+            let data = val.text().await?;
+            serde_json::from_str(&data)?
         }
         Err(err) => {
-            let _ = sender.send(UCStatus::RequestError(err.to_string())).await;
-            return;
+            sender.send(UCStatus::RequestError(err.to_string())).await?;
+            return Ok(());
         }
     };
 
     if let Some(error) = data["errorMessage"].as_str() {
-        let _ = sender
+        sender
             .send(UCStatus::ConnectionError(error.to_string()))
-            .await;
+            .await?;
     } else {
-        let client_token = data["clientToken"].as_str().unwrap().to_string();
-        let access_token = data["accessToken"].as_str().unwrap().to_string();
-        let uuid = data["selectedProfile"]["id"].as_str().unwrap().to_string();
+        let client_token = data["clientToken"]
+            .as_str()
+            .ok_or("clientToken str")?
+            .to_string();
+        let access_token = data["accessToken"]
+            .as_str()
+            .ok_or("accessToken str")?
+            .to_string();
+        let uuid = data["selectedProfile"]["id"]
+            .as_str()
+            .ok_or("selectedProfile id str")?
+            .to_string();
 
-        let _ = sender
+        sender
             .send(UCStatus::User(User::new(
                 username,
                 uuid,
                 client_token,
                 access_token,
             )))
-            .await;
+            .await?;
     }
+
+    Ok(())
 }
 
 /// Try to connect to mojang api with Username and Password
+// Remove this to just use microsoft connect method
 pub fn connect_to_mojang(username: String, password: String) -> UConnect {
     let (sender, receiver) = channel(1);
-    let thread = tokio::spawn(async move { intern_connect(username, password, sender).await });
+    let thread =
+        tokio::spawn(async move { intern_connect(username, password, sender).await.unwrap() });
 
     UConnect {
         receiver,
