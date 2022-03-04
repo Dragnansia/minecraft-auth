@@ -16,7 +16,7 @@ use std::{
     collections::HashMap,
     env,
     fmt::{self, Display, Formatter},
-    fs::{create_dir_all, File},
+    fs::{self, create_dir_all, File},
     io::{self, BufRead, BufReader, Write},
     path::Path,
     process::{Child, Command},
@@ -409,6 +409,8 @@ fn install_natives_file(
     manifest: &Package,
 ) -> Result<(), error::Error> {
     let native_dir = format!("{}/natives", instance_path);
+    fs::create_dir_all(&native_dir)?;
+
     for libs in &manifest.libraries {
         let classifiers = &libs.downloads.classifiers;
         if classifiers.is_none() {
@@ -426,6 +428,8 @@ fn install_natives_file(
                 app.path,
                 data[os_native_name().into()].path.clone().unwrap()
             );
+
+            info!("{}", file_path);
 
             let file = File::open(file_path)?;
             let mut zip = ZipArchive::new(file)?;

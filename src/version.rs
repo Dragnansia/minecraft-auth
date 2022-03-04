@@ -8,9 +8,9 @@ use crate::{
     },
     downloader::{download_file, FileInfo},
     error::{self, Error},
+    native::os_native_name,
     MinecraftAuth,
 };
-use log::info;
 use serde::Deserialize;
 use std::{fs::File, io::BufReader, path::Path};
 
@@ -76,8 +76,13 @@ async fn download_libraries(
             add_download_with_lib_info(artifact, &lib_path, files);
         }
 
-        if let Some(Classifier::Simple(classifiers)) = &lib.downloads.classifiers {
-            add_download_with_lib_info(classifiers, &lib_path, files);
+        if let Some(classifiers) = &lib.downloads.classifiers {
+            let classifier = match classifiers {
+                Classifier::Simple(a) => a,
+                Classifier::Complex(c) => &c[os_native_name()],
+            };
+
+            add_download_with_lib_info(classifier, &lib_path, files);
         }
     });
 
@@ -126,10 +131,11 @@ async fn download_assets(
                 let size = o.1.size;
 
                 let path = Path::new(&p);
-                let file = File::open(&p).ok()?;
-
-                if path.exists() || file.metadata().ok()?.len() != size {
-                    return None;
+                if path.exists() {
+                    let file = File::open(&p).ok()?;
+                    if file.metadata().ok()?.len() == size {
+                        return None;
+                    }
                 }
 
                 Some(FileInfo::new(url, p, size))

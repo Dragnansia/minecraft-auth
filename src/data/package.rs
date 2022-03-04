@@ -3,7 +3,7 @@ use super::{
 };
 use serde::{Deserialize, Serialize};
 
-#[derive(Deserialize, Serialize, Clone)]
+#[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct Package {
     pub arguments: Option<Arguments>,
     #[serde(rename = "assetIndex")]
@@ -22,7 +22,7 @@ pub struct Package {
     pub t: String,
 }
 
-#[derive(Deserialize, Serialize, Clone)]
+#[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct Downloads {
     pub client: Artifact,
     pub server: Artifact,
