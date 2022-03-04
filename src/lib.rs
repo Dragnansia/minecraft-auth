@@ -1,5 +1,6 @@
 use std::fs;
 
+pub mod data;
 pub mod downloader;
 pub mod error;
 pub mod instance;

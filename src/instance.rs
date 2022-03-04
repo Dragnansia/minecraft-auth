@@ -1,12 +1,6 @@
 use crate::{
-    downloader::FileInfo,
-    error,
-    java::find_java_version,
-    native::os_native_name,
-    user::User,
-    utils::scan,
-    version::{get_artifact, get_classifiers, manifest},
-    MinecraftAuth,
+    data::package::Package, downloader::FileInfo, error, java::find_java_version,
+    native::os_native_name, user::User, utils::scan, version::manifest, MinecraftAuth,
 };
 use log::{error, info};
 use serde_json::Value;
@@ -452,14 +446,14 @@ pub fn get_all_libs_of_version(app: &MinecraftAuth, version: &str) -> Option<Str
     let mut libs = String::new();
     let s = if cfg!(windows) { ';' } else { ':' };
 
-    let manifest = manifest(app, version)?;
-    for lib in manifest["libraries"].as_array()? {
-        let l = if let Some(artifact) = get_artifact(lib) {
-            artifact["path"].as_str()?
-        } else if let Some(classifiers) = get_classifiers(lib) {
-            classifiers["path"].as_str()?
+    let manifest: Package = manifest(app, version)?;
+    for lib in manifest.libraries {
+        let l = if let Some(artifact) = &lib.downloads.artifact {
+            artifact.path.clone().unwrap_or_default()
+        } else if let Some(classifiers) = &lib.downloads.classifiers {
+            classifiers.path.clone().unwrap_or_default()
         } else {
-            ""
+            "".into()
         };
 
         libs += &format!("{}/libraries/{}{}", app.path, l, s);
