@@ -16,6 +16,7 @@ pub struct Artifact {
 }
 
 #[derive(Deserialize, Serialize, Clone)]
+#[serde(untagged)]
 pub enum Classifier {
     Simple(Artifact),
     Complex(HashMap<String, Artifact>),
