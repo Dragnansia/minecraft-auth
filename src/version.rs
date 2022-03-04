@@ -1,36 +1,35 @@
 use crate::{
     data::{
         asset::{AssetIndex, Assets},
-        download::Artifact,
+        download::{Artifact, Classifier},
         library::Library,
         package::Package,
         version::{ManifestVersion, Version},
     },
     downloader::{download_file, FileInfo},
-    error, MinecraftAuth,
+    error::{self, Error},
+    MinecraftAuth,
 };
 use serde::Deserialize;
 use std::{fs::File, io::BufReader, path::Path};
 
-fn intern_manifest<T>(p: &str) -> Option<T>
+fn intern_manifest<T>(p: &str) -> Result<T, Error>
 where
     T: for<'de> Deserialize<'de>,
 {
-    let file = File::open(p).ok()?;
+    let file = File::open(p)?;
     let reader = BufReader::new(file);
-    let t = serde_json::from_reader(reader).ok()?;
-
-    Some(t)
+    Ok(serde_json::from_reader(reader)?)
 }
 
-pub fn manifest<T>(app: &MinecraftAuth, version: &str) -> Option<T>
+pub fn manifest<T>(app: &MinecraftAuth, version: &str) -> Result<T, Error>
 where
     T: for<'de> Deserialize<'de>,
 {
     intern_manifest::<T>(&format!("{}/versions/{}.json", app.path, version))
 }
 
-pub fn version_manifest<T>(app: &MinecraftAuth, version: &str) -> Option<T>
+pub fn version_manifest<T>(app: &MinecraftAuth, version: &str) -> Result<T, Error>
 where
     T: for<'de> Deserialize<'de>,
 {
@@ -72,7 +71,7 @@ async fn download_libraries(
             add_download_with_lib_info(artifact, &lib_path, files);
         }
 
-        if let Some(classifiers) = &lib.downloads.classifiers {
+        if let Some(Classifier::Simple(classifiers)) = &lib.downloads.classifiers {
             add_download_with_lib_info(classifiers, &lib_path, files);
         }
     });
@@ -101,13 +100,13 @@ async fn download_assets(
     app: &MinecraftAuth,
     assets: &AssetIndex,
     files: &mut Vec<FileInfo>,
-) -> Option<()> {
+) -> Result<(), Error> {
     let id = &assets.id;
     let url = &assets.url;
     let path = format!("{}/assets", app.path);
     let indexes_path = format!("{}/indexes/", path);
 
-    download_manifest(&indexes_path, url, id).await.ok()?;
+    download_manifest(&indexes_path, url, id).await?;
 
     let assets: Assets = version_manifest(app, id)?;
     files.append(
@@ -133,7 +132,7 @@ async fn download_assets(
             .collect(),
     );
 
-    Some(())
+    Ok(())
 }
 
 async fn find_and_install_minecraft_version(
@@ -148,18 +147,18 @@ async fn find_and_install_minecraft_version(
         .ok_or("No version found")?;
 
     let package: Package = match manifest(app, &v.id) {
-        Some(m) => m,
-        None => {
+        Ok(m) => m,
+        _ => {
             let path = format!("{}/versions/", app.path);
             download_manifest(&path, &v.url, &v.id).await?;
 
-            manifest(app, &v.id).ok_or("No manifest")?
+            manifest(app, &v.id)?
         }
     };
 
     download_libraries(app, &package.libraries, files).await;
     download_client(app, &package.downloads.client, version, files).await;
-    download_assets(app, &package.asset_index, files).await;
+    download_assets(app, &package.asset_index, files).await?;
 
     Ok(())
 }
@@ -177,8 +176,8 @@ pub async fn file_to_download_for_version(
     let mut files = vec![];
 
     let manifest: ManifestVersion = match manifest(app, "manifest_version") {
-        Some(manifest) => manifest,
-        None => {
+        Ok(manifest) => manifest,
+        _ => {
             let path = format!("{}/versions", app.path);
             download_manifest(
                 &path,
@@ -187,7 +186,7 @@ pub async fn file_to_download_for_version(
             )
             .await?;
 
-            manifest(app, "manifest_version").ok_or("Can't find manifest_version file")?
+            manifest(app, "manifest_version")?
         }
     };
 

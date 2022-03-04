@@ -18,6 +18,8 @@ pub struct Package {
     pub libraries: Vec<Library>,
     #[serde(rename = "mainClass")]
     pub main_class: String,
+    #[serde(rename = "type")]
+    pub t: String,
 }
 
 #[derive(Deserialize, Serialize, Clone)]

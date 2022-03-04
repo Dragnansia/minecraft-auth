@@ -1,9 +1,10 @@
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 #[derive(Deserialize, Serialize, Clone)]
 pub struct Download {
     pub artifact: Option<Artifact>,
-    pub classifiers: Option<Artifact>,
+    pub classifiers: Option<Classifier>,
 }
 
 #[derive(Deserialize, Serialize, Clone)]
@@ -12,4 +13,10 @@ pub struct Artifact {
     pub sha1: String,
     pub size: u64,
     pub url: String,
+}
+
+#[derive(Deserialize, Serialize, Clone)]
+pub enum Classifier {
+    Simple(Artifact),
+    Complex(HashMap<String, Artifact>),
 }

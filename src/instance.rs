@@ -1,9 +1,15 @@
 use crate::{
-    data::package::Package, downloader::FileInfo, error, java::find_java_version,
-    native::os_native_name, user::User, utils::scan, version::manifest, MinecraftAuth,
+    data::{download::Classifier, package::Package},
+    downloader::FileInfo,
+    error::{self, Error},
+    java::find_java_version,
+    native::os_native_name,
+    user::User,
+    utils::scan,
+    version::manifest,
+    MinecraftAuth,
 };
 use log::{error, info};
-use serde_json::Value;
 #[cfg(target_os = "windows")]
 use std::os::windows::process::CommandExt;
 use std::{
@@ -168,10 +174,9 @@ impl Instance {
                 param,
             };
 
-            let manifest =
-                manifest(app, version).ok_or(InstanceCreateError::NoFoundManifestVersion)?;
+            let manifest = manifest(app, version)?;
 
-            this.end_init_instance(app, &manifest, name, version);
+            this.end_init_instance(app, &manifest, name, version)?;
             Ok(this)
         } else {
             Err(InstanceCreateError::FolderCreateError.into())
@@ -181,10 +186,10 @@ impl Instance {
     fn end_init_instance(
         &mut self,
         app: &MinecraftAuth,
-        manifest: &Value,
+        manifest: &Package,
         name: &str,
         version: &str,
-    ) -> Option<()> {
+    ) -> Result<(), Error> {
         let path = format!("{}/instances/{}", app.path, name);
 
         self.add_param("name", Param::new(DataParam::Str(name.to_string()), false));
@@ -212,16 +217,13 @@ impl Instance {
         self.add_param(
             "javaVersion",
             Param::new(
-                DataParam::Int(manifest["javaVersion"]["majorVersion"].as_i64()? as i32),
+                DataParam::Int(manifest.java_version.major_version as i32),
                 false,
             ),
         );
         self.add_param(
             "assetIndex",
-            Param::new(
-                DataParam::Str(manifest["assets"].as_str()?.to_string()),
-                false,
-            ),
+            Param::new(DataParam::Str(manifest.assets.clone()), false),
         );
 
         if self.param("useForge").is_true() {
@@ -246,26 +248,20 @@ impl Instance {
         } else {
             self.add_param(
                 "versionType",
-                Param::new(
-                    DataParam::Str(manifest["type"].as_str()?.to_string()),
-                    false,
-                ),
+                Param::new(DataParam::Str(manifest.t.clone()), false),
             );
             self.add_param(
                 "mainClass",
-                Param::new(
-                    DataParam::Str(manifest["mainClass"].as_str()?.to_string()),
-                    false,
-                ),
+                Param::new(DataParam::Str(manifest.main_class.clone()), false),
             );
         }
 
         if self.is_new {
-            install_natives_file(app, &path, manifest).ok()?;
-            self.save_config().ok()?;
+            install_natives_file(app, &path, manifest)?;
+            self.save_config()?;
         }
 
-        Some(())
+        Ok(())
     }
 
     // Need to find a method to download forge file
@@ -400,9 +396,8 @@ impl Instance {
             .param("version")
             .as_string()
             .ok_or(InstanceCreateError::NoFoundVersion)?;
-        let manifest =
-            manifest(app, &version).ok_or(InstanceCreateError::NoFoundManifestVersion)?;
-        this.end_init_instance(app, &manifest, name, &version);
+        let manifest = manifest(app, &version)?;
+        this.end_init_instance(app, &manifest, name, &version)?;
         Ok(this)
     }
 }
@@ -411,38 +406,37 @@ impl Instance {
 fn install_natives_file(
     app: &MinecraftAuth,
     instance_path: &str,
-    manifest: &Value,
+    manifest: &Package,
 ) -> Result<(), error::Error> {
     let native_dir = format!("{}/natives", instance_path);
-    for libs in manifest["libraries"]
-        .as_array()
-        .ok_or("Can't find libraries on manifest")?
-    {
-        let classifiers = &libs["downloads"]["classifiers"];
-        if classifiers.is_null() {
+    for libs in &manifest.libraries {
+        let classifiers = &libs.downloads.classifiers;
+        if classifiers.is_none() {
             continue;
         }
 
-        let native = &classifiers[os_native_name()];
-        if native.is_null() {
+        let native = classifiers;
+        if native.is_none() {
             continue;
         }
 
-        let file_path = format!(
-            "{}/libraries/{}",
-            app.path,
-            native["path"].as_str().ok_or("No path")?
-        );
+        if let Some(Classifier::Complex(data)) = native {
+            let file_path = format!(
+                "{}/libraries/{}",
+                app.path,
+                data[os_native_name().into()].path.clone().unwrap()
+            );
 
-        let file = File::open(file_path)?;
-        let mut zip = ZipArchive::new(file)?;
-        zip.extract(native_dir.clone())?;
+            let file = File::open(file_path)?;
+            let mut zip = ZipArchive::new(file)?;
+            zip.extract(native_dir.clone())?;
+        }
     }
 
     Ok(())
 }
 
-pub fn get_all_libs_of_version(app: &MinecraftAuth, version: &str) -> Option<String> {
+pub fn get_all_libs_of_version(app: &MinecraftAuth, version: &str) -> Result<String, Error> {
     let mut libs = String::new();
     let s = if cfg!(windows) { ';' } else { ':' };
 
@@ -450,7 +444,7 @@ pub fn get_all_libs_of_version(app: &MinecraftAuth, version: &str) -> Option<Str
     for lib in manifest.libraries {
         let l = if let Some(artifact) = &lib.downloads.artifact {
             artifact.path.clone().unwrap_or_default()
-        } else if let Some(classifiers) = &lib.downloads.classifiers {
+        } else if let Some(Classifier::Simple(classifiers)) = &lib.downloads.classifiers {
             classifiers.path.clone().unwrap_or_default()
         } else {
             "".into()
@@ -460,7 +454,7 @@ pub fn get_all_libs_of_version(app: &MinecraftAuth, version: &str) -> Option<Str
     }
 
     libs += &format!("{}/clients/{}/client.jar", app.path, version);
-    Some(libs)
+    Ok(libs)
 }
 
 fn change_current_dir<P: AsRef<Path>>(dir: P) -> io::Result<()> {
