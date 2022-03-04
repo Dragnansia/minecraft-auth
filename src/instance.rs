@@ -423,6 +423,10 @@ fn install_natives_file(
         }
 
         if let Some(Classifier::Complex(data)) = native {
+            if !data.contains_key(os_native_name()) {
+                continue;
+            }
+
             let file_path = format!(
                 "{}/libraries/{}",
                 app.path,

@@ -11,6 +11,7 @@ use crate::{
     native::os_native_name,
     MinecraftAuth,
 };
+use log::info;
 use serde::Deserialize;
 use std::{fs::File, io::BufReader, path::Path};
 
@@ -79,7 +80,14 @@ async fn download_libraries(
         if let Some(classifiers) = &lib.downloads.classifiers {
             let classifier = match classifiers {
                 Classifier::Simple(a) => a,
-                Classifier::Complex(c) => &c[os_native_name()],
+                Classifier::Complex(c) => {
+                    if !c.contains_key(os_native_name()) {
+                        info!("return");
+                        return;
+                    }
+
+                    &c[os_native_name()]
+                }
             };
 
             add_download_with_lib_info(classifier, &lib_path, files);
@@ -96,10 +104,15 @@ async fn download_client(
     files: &mut Vec<FileInfo>,
 ) -> Option<()> {
     let path = format!("{}/clients/{}/client.jar", app.path, version);
-    let file = File::open(&path).ok()?;
-    let p = Path::new(&path);
 
-    if !p.exists() || file.metadata().ok()?.len() != client.size {
+    let p = Path::new(&path);
+    if !p.exists() {
+        files.push(FileInfo::new(client.url.clone(), path, client.size));
+        return Some(());
+    }
+
+    let file = File::open(&path).ok()?;
+    if file.metadata().ok()?.len() != client.size {
         files.push(FileInfo::new(client.url.clone(), path, client.size));
     }
 
@@ -204,4 +217,19 @@ pub async fn file_to_download_for_version(
     find_and_install_minecraft_version(app, &version, &manifest.versions, &mut files).await?;
 
     Ok(files)
+}
+
+#[test]
+fn test() {
+    let manifest: Package = manifest(
+        &MinecraftAuth::new_just_name("Nordtika".into()).unwrap(),
+        "1.12.2",
+    )
+    .unwrap();
+
+    manifest.libraries.iter().for_each(|a| {
+        if let Some(Classifier::Complex(classifier)) = &a.downloads.classifiers {
+            println!("{:?}", classifier["natives-linux"]);
+        }
+    });
 }
