@@ -10,6 +10,7 @@ use crate::{
     error::{self, Error},
     MinecraftAuth,
 };
+use log::info;
 use serde::Deserialize;
 use std::{fs::File, io::BufReader, path::Path};
 
@@ -49,9 +50,13 @@ fn add_download_with_lib_info(
     let path = format!("{}{}", lib_path, infos.path.clone().unwrap_or_default());
 
     let p = Path::new(&path);
-    let file = File::open(&path).ok()?;
+    if !p.exists() {
+        files.push(FileInfo::new(url.to_string(), path, infos.size));
+        return Some(());
+    }
 
-    if !p.exists() || file.metadata().ok()?.len() != infos.size {
+    let file = File::open(&path).ok()?;
+    if file.metadata().ok()?.len() != infos.size {
         files.push(FileInfo::new(url.to_string(), path, infos.size));
     }
 
