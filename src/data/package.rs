@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Deserialize, Serialize, Clone)]
 pub struct Package {
-    pub arguments: Arguments,
+    pub arguments: Option<Arguments>,
     #[serde(rename = "assetIndex")]
     pub asset_index: AssetIndex,
     pub assets: String,
