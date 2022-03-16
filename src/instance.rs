@@ -256,8 +256,9 @@ impl Instance {
             );
         }
 
+        install_natives_file(app, &path, manifest)?;
+
         if self.is_new {
-            install_natives_file(app, &path, manifest)?;
             self.save_config()?;
         }
 
@@ -411,29 +412,23 @@ fn install_natives_file(
     let native_dir = format!("{}/natives", instance_path);
     fs::create_dir_all(&native_dir)?;
 
+    let os_name = os_native_name();
     for libs in &manifest.libraries {
         let classifiers = &libs.downloads.classifiers;
         if classifiers.is_none() {
             continue;
         }
 
-        let native = classifiers;
-        if native.is_none() {
-            continue;
-        }
-
-        if let Some(Classifier::Complex(data)) = native {
-            if !data.contains_key(os_native_name()) {
+        if let Some(Classifier::Complex(data)) = classifiers {
+            if !data.contains_key(os_name) {
                 continue;
             }
 
             let file_path = format!(
                 "{}/libraries/{}",
                 app.path,
-                data[os_native_name().into()].path.clone().unwrap()
+                data[os_name].path.clone().unwrap()
             );
-
-            info!("{}", file_path);
 
             let file = File::open(file_path)?;
             let mut zip = ZipArchive::new(file)?;
