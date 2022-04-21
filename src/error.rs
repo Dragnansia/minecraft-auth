@@ -14,6 +14,22 @@ pub enum Error {
     Other(String),
 }
 
+impl std::fmt::Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let message = match self {
+            Error::File(f) => f.to_string(),
+            Error::Reqwest(r) => r.to_string(),
+            Error::SerdeJson(s) => s.to_string(),
+            Error::SendError(s) => s.to_string(),
+            Error::InstanceCreate(ic) => ic.to_string(),
+            Error::Zip(z) => z.to_string(),
+            Error::Other(o) => o.to_string(),
+        };
+
+        f.write_str(&message)
+    }
+}
+
 impl From<io::Error> for Error {
     fn from(error: io::Error) -> Self {
         Self::File(error)

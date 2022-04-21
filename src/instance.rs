@@ -33,6 +33,21 @@ pub enum InstanceCreateError {
     NeedDownload(Vec<FileInfo>),
 }
 
+impl Display for InstanceCreateError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let message = match self {
+            InstanceCreateError::NoFoundVersion => String::from("Version not found"),
+            InstanceCreateError::AlreadyExist => String::from("Already Exist"),
+            InstanceCreateError::FolderCreateError => String::from("Error on folder creation"),
+            InstanceCreateError::ReadConfigError(config) => config.clone(),
+            InstanceCreateError::NoFoundManifestVersion => String::from("No found manifest"),
+            InstanceCreateError::NeedDownload(v) => format!("Need {} Downloads", v.len()),
+        };
+
+        f.write_str(&message)
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum DataParam {
     Int(i32),
